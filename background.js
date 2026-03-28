@@ -1,6 +1,11 @@
 // ===== Bulk Poster — background.js =====
 // Service Worker: จัดการ Cookie, Facebook API, โพสต์, ตั้งเวลา
 
+const WEB_URL = 'https://fb-carousel-scheduler.vercel.app';
+
+// กด icon → เปิดเว็บ (fallback ถ้าไม่มี popup)
+// chrome.action.onClicked.addListener(() => chrome.tabs.create({ url: WEB_URL }));
+
 // ─── Cookie & Auth Setup ───────────────────────────────────────────────────
 
 async function getFacebookCookies() {
