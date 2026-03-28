@@ -273,6 +273,33 @@ function handleApiRequest(request, sender, sendResponse) {
 
     // ── Bulk Poster API ──────────────────────────────────────────────────
 
+    if (request.type === 'GET_AD_ACCOUNTS') {
+      let data = await fbGet('/me/adaccounts?fields=id,name&limit=100');
+      if (data.error) {
+        const token = await getOrExtractToken();
+        if (token) data = await fbGet('/me/adaccounts?fields=id,name&limit=100', token);
+      }
+      return data;
+    }
+
+    if (request.type === 'POST_TO_PAGE') {
+      const { page, postData } = request;
+      const params = { access_token: page.access_token };
+      if (postData.link)        params.link        = postData.link;
+      if (postData.message)     params.message     = postData.message;
+      if (postData.name)        params.name        = postData.name;
+      if (postData.caption)     params.caption     = postData.caption;
+      if (postData.description) params.description = postData.description;
+      params.published = 'true';
+      const result = await fbPost(`/${page.id}/feed`, params);
+      return result;
+    }
+
+    if (request.type === 'ADD_HISTORY') {
+      await addHistory(request.entry);
+      return { success: true };
+    }
+
     if (request.type === 'SAVE_TOKEN') {
       await chrome.storage.local.set({
         userToken: request.token,
