@@ -3,6 +3,10 @@
 
 const WEB_URL = 'https://bulk-poster.vercel.app';
 
+chrome.action.onClicked.addListener(() => {
+  chrome.tabs.create({ url: WEB_URL });
+});
+
 // ─── Cookie & Auth Setup ───────────────────────────────────────────────────
 
 async function getFacebookCookies() {
