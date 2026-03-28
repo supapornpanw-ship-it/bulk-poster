@@ -1,7 +1,7 @@
 // ===== Bulk Poster — background.js =====
 // Service Worker: จัดการ Cookie, Facebook API, โพสต์, ตั้งเวลา
 
-const WEB_URL = 'https://fb-carousel-scheduler.vercel.app';
+const WEB_URL = 'https://bulk-poster.vercel.app';
 
 // ─── Cookie & Auth Setup ───────────────────────────────────────────────────
 
