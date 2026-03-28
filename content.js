@@ -1,22 +1,26 @@
-// content.js - Bridge ระหว่างหน้าเว็บและ Extension
-// ทำให้หน้าเว็บสามารถส่งคำสั่งไปหา background.js ได้โดยไม่ต้องรู้ Extension ID
+// content.js — Bridge ระหว่างหน้าเว็บและ Extension
 
+// ตอบ PING จากเว็บ (เพื่อให้เว็บรู้ว่า extension พร้อม)
 window.addEventListener("message", (event) => {
-    // รับเฉพาะข้อความที่มาจากหน้าเว็บเดียวกัน และมีทิศทางถูกต้อง
-    if (event.source !== window || !event.data || event.data.direction !== "from-page-script") {
-        return;
-    }
+  if (event.source !== window || !event.data) return;
 
-    // ส่งต่อข้อความไปที่ background.js
-    chrome.runtime.sendMessage(event.data.message, (response) => {
-        // เมื่อพื้นหลังตอบกลับ ส่งคำตอบนั้นกลับคืนไปที่หน้าเว็บ
-        window.postMessage({
-            direction: "from-content-script",
-            response: response,
-            messageId: event.data.messageId
-        }, "*");
-    });
+  // ตอบ ping
+  if (event.data.type === "BP_PING") {
+    window.postMessage({ direction: "from-content-script", status: "ready" }, "*");
+    return;
+  }
+
+  // รับคำสั่งจากเว็บ ส่งต่อไป background.js
+  if (event.data.direction !== "from-page-script" || !event.data.message) return;
+
+  chrome.runtime.sendMessage(event.data.message, (response) => {
+    window.postMessage({
+      direction: "from-content-script",
+      response: response,
+      messageId: event.data.messageId
+    }, "*");
+  });
 });
 
-// ส่งสัญญาณบอกหน้าเว็บว่า Extension พร้อมทำงานแล้ว
+// ส่ง ready ทันทีเผื่อเว็บโหลดก่อน
 window.postMessage({ direction: "from-content-script", status: "ready" }, "*");

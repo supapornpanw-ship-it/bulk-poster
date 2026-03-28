@@ -43,7 +43,7 @@
         "http://127.0.0.1:3500/*"
       ],
       "js": ["content.js"],
-      "run_at": "document_start"
+      "run_at": "document_idle"
     }
   ],
   "externally_connectable": {

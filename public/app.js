@@ -48,13 +48,20 @@ let selectedIds = new Set();
 
 // ─── Init ─────────────────────────────────────────────────────
 
-// รอ content script ส่ง ready (3 วิ ถ้าไม่มีแสดง no-ext screen)
-setTimeout(() => {
-  if (!extReady) {
-    document.getElementById('connectScreen').style.display = 'none';
-    document.getElementById('noExtScreen').style.display = '';
+// ส่ง ping ไปหา content script ทุก 500ms (สูงสุด 10 ครั้ง)
+let pingCount = 0;
+const pingInterval = setInterval(() => {
+  if (extReady) { clearInterval(pingInterval); return; }
+  window.postMessage({ type: "BP_PING" }, "*");
+  pingCount++;
+  if (pingCount >= 10) {
+    clearInterval(pingInterval);
+    if (!extReady) {
+      document.getElementById('connectScreen').style.display = 'none';
+      document.getElementById('noExtScreen').style.display = '';
+    }
   }
-}, 3000);
+}, 500);
 
 async function init() {
   document.getElementById('noExtScreen').style.display = 'none';
