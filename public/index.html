@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bulk Poster — โพสต์หลายเพจพร้อมกัน</title>
+  <link rel="stylesheet" href="app.css" />
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-left">
+    <div class="logo">📋</div>
+    <div>
+      <div class="app-name">Bulk Poster</div>
+      <div class="app-sub">โพสต์ Card Link หลายเพจพร้อมกัน</div>
+    </div>
+  </div>
+  <div id="connStatus" class="conn-badge conn-off">ไม่ได้เชื่อมต่อ</div>
+</header>
+
+<!-- ─── No Extension ─────────────────────────────────────────── -->
+<div id="noExtScreen" class="center-screen" style="display:none">
+  <div class="big-icon">🔌</div>
+  <h2>ต้องติดตั้ง Extension ก่อน</h2>
+  <p>Bulk Poster ต้องใช้งานร่วมกับ Chrome Extension<br/>เพื่อเชื่อมต่อกับ Facebook</p>
+  <a href="https://github.com/supapornpanw-ship-it/bulk-poster" target="_blank" class="btn btn-primary btn-lg">
+    📥 ดาวน์โหลด Extension
+  </a>
+</div>
+
+<!-- ─── Connect Screen ───────────────────────────────────────── -->
+<div id="connectScreen" class="center-screen">
+  <div class="big-icon">🔗</div>
+  <h2>เชื่อมต่อ Facebook</h2>
+  <p>ล็อกอิน Facebook ในเบราว์เซอร์นี้ก่อน<br/>แล้วกดปุ่มด้านล่าง</p>
+  <button id="btnConnect" class="btn btn-primary btn-lg">🔌 เชื่อมต่อ Facebook</button>
+  <div id="connectError" class="error-msg" style="display:none"></div>
+</div>
+
+<!-- ─── Main App ─────────────────────────────────────────────── -->
+<main id="mainApp" style="display:none">
+
+  <div class="layout">
+
+    <!-- LEFT: Compose ──────────────────────────────────────── -->
+    <section class="panel panel-compose">
+      <h2 class="panel-title">📝 สร้างโพสต์</h2>
+
+      <!-- URL -->
+      <div class="field-group">
+        <label class="field-label">🔗 ลิงก์ Card Link</label>
+        <div class="url-row">
+          <input id="linkInput" type="url" class="input-field" placeholder="https://example.com/article" />
+          <button id="btnPreview" class="btn btn-ghost">ดึง Preview</button>
+        </div>
+      </div>
+
+      <!-- Preview Card -->
+      <div id="previewCard" class="preview-card" style="display:none">
+        <div id="previewImgWrap" style="display:none">
+          <img id="previewImg" alt="preview" class="preview-img" />
+        </div>
+        <div class="preview-body">
+          <div id="previewSite" class="preview-site"></div>
+          <div id="previewTitle" class="preview-title"></div>
+          <div id="previewDesc" class="preview-desc"></div>
+        </div>
+      </div>
+
+      <!-- Message -->
+      <div class="field-group">
+        <label class="field-label">💬 ข้อความ (ไม่บังคับ)</label>
+        <textarea id="msgInput" class="input-field" rows="4" placeholder="ใส่แคปชั่น..."></textarea>
+      </div>
+
+      <!-- Schedule -->
+      <div class="field-group">
+        <label class="toggle-label">
+          <input type="checkbox" id="schedToggle" />
+          <span class="toggle-sw"></span>
+          <span>⏰ ตั้งเวลาโพส</span>
+        </label>
+        <div id="schedPicker" style="display:none; margin-top:10px;">
+          <input id="schedDT" type="datetime-local" class="input-field" />
+        </div>
+      </div>
+
+      <!-- Post Button -->
+      <button id="btnPost" class="btn btn-primary btn-full btn-lg">
+        <span id="postIcon">🚀</span> <span id="postLabel">โพสต์ทันที</span>
+      </button>
+
+      <!-- Progress -->
+      <div id="postProgress" style="display:none" class="progress-wrap">
+        <div class="progress-track"><div id="progressBar" class="progress-fill"></div></div>
+        <div id="progressText" class="progress-text">กำลังโพสต์...</div>
+      </div>
+
+      <!-- Results -->
+      <div id="postResults" style="display:none" class="results-box"></div>
+    </section>
+
+    <!-- RIGHT: Pages + Tabs ────────────────────────────────── -->
+    <section class="panel panel-right">
+
+      <!-- Pages -->
+      <div class="pages-section">
+        <div class="section-header">
+          <h2 class="panel-title">📄 เลือกเพจ</h2>
+          <div class="section-actions">
+            <button id="btnAll" class="btn btn-ghost btn-sm">เลือกทั้งหมด</button>
+            <button id="btnNone" class="btn btn-ghost btn-sm">ล้าง</button>
+            <button id="btnReload" class="btn btn-ghost btn-sm">🔄</button>
+          </div>
+        </div>
+        <div id="pagesList" class="pages-list">
+          <div class="loading-row"><div class="spinner"></div> กำลังโหลดเพจ...</div>
+        </div>
+        <div id="selCount" class="sel-count"></div>
+      </div>
+
+      <!-- Tabs -->
+      <div class="tabs-section">
+        <div class="tab-nav">
+          <button class="tab-btn active" data-tab="scheduled">📅 ตั้งเวลา <span id="schedBadge" class="badge" style="display:none">0</span></button>
+          <button class="tab-btn" data-tab="history">📊 ประวัติ</button>
+        </div>
+
+        <div id="tab-scheduled" class="tab-pane active">
+          <div class="pane-toolbar">
+            <button id="btnRefSched" class="btn btn-ghost btn-sm">🔄 โหลดใหม่</button>
+          </div>
+          <div id="schedList" class="job-list">
+            <div class="empty-state"><div>📅</div>ยังไม่มีรายการตั้งเวลา</div>
+          </div>
+        </div>
+
+        <div id="tab-history" class="tab-pane">
+          <div class="pane-toolbar">
+            <button id="btnClrHist" class="btn btn-ghost btn-sm btn-danger-txt">🗑 ล้างประวัติ</button>
+          </div>
+          <div id="histList" class="job-list">
+            <div class="empty-state"><div>📊</div>ยังไม่มีประวัติ</div>
+          </div>
+        </div>
+      </div>
+
+    </section>
+  </div>
+
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>
