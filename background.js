@@ -3,11 +3,6 @@
 
 const WEB_URL = 'https://fb-carousel-scheduler.vercel.app';
 
-// กด icon → เปิดเว็บ
-chrome.action.onClicked.addListener(() => {
-  chrome.tabs.create({ url: WEB_URL });
-});
-
 // ─── Cookie & Auth Setup ───────────────────────────────────────────────────
 
 async function getFacebookCookies() {
@@ -61,8 +56,36 @@ async function setupCookieRules(cookieString) {
 
 // ─── Facebook Graph API ────────────────────────────────────────────────────
 
-async function fbGet(path) {
-  const resp = await fetch(`https://graph.facebook.com/v20.0${path}`);
+async function extractUserToken() {
+  // ใช้ token ที่ cache ไว้ถ้ายังไม่หมดอายุ
+  const { userToken, tokenExpiry } = await chrome.storage.local.get(['userToken', 'tokenExpiry']);
+  if (userToken && tokenExpiry && Date.now() < tokenExpiry) return userToken;
+
+  // ดึง token จากหน้า Facebook
+  const resp = await fetch('https://www.facebook.com/', { headers: { Accept: 'text/html' } });
+  const html = await resp.text();
+
+  const patterns = [
+    /"accessToken"\s*:\s*"(EAA[^"]{20,})"/,
+    /access_token=(EAA[^&"]{20,})/,
+    /"token"\s*:\s*"(EAA[^"]{20,})"/,
+    /\"accessToken\":\"([^\"]+)\"/,
+  ];
+
+  for (const p of patterns) {
+    const m = html.match(p);
+    if (m && m[1]) {
+      await chrome.storage.local.set({ userToken: m[1], tokenExpiry: Date.now() + 3600000 });
+      return m[1];
+    }
+  }
+  throw new Error('ไม่สามารถดึง Access Token ได้ — กรุณาเปิด Facebook.com ค้างไว้แล้วลองใหม่');
+}
+
+async function fbGet(path, token) {
+  const sep = path.includes('?') ? '&' : '?';
+  const url = `https://graph.facebook.com/v20.0${path}${token ? sep + 'access_token=' + token : ''}`;
+  const resp = await fetch(url);
   return resp.json();
 }
 
@@ -77,7 +100,10 @@ async function fbPost(path, params) {
 }
 
 async function getPages() {
-  return fbGet('/me/accounts?fields=id,name,access_token,picture.type(square){url}&limit=200');
+  const token = await extractUserToken();
+  const data = await fbGet('/me/accounts?fields=id,name,access_token,picture.type(square){url}&limit=200', token);
+  if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
+  return data;
 }
 
 async function postToPage(pageId, pageToken, { link, message, scheduledTime }) {

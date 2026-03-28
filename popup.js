@@ -6,7 +6,7 @@ function msg(type, extra = {}) {
   return new Promise((resolve, reject) => {
     chrome.runtime.sendMessage({ type, ...extra }, res => {
       if (chrome.runtime.lastError) return reject(new Error(chrome.runtime.lastError.message));
-      if (res && res.error) return reject(new Error(res.error));
+      if (res && res.error) return reject(new Error(typeof res.error === 'object' ? (res.error.message || JSON.stringify(res.error)) : res.error));
       resolve(res);
     });
   });
