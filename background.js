@@ -3,8 +3,10 @@
 
 const WEB_URL = 'https://fb-carousel-scheduler.vercel.app';
 
-// กด icon → เปิดเว็บ (fallback ถ้าไม่มี popup)
-// chrome.action.onClicked.addListener(() => chrome.tabs.create({ url: WEB_URL }));
+// กด icon → เปิดเว็บ
+chrome.action.onClicked.addListener(() => {
+  chrome.tabs.create({ url: WEB_URL });
+});
 
 // ─── Cookie & Auth Setup ───────────────────────────────────────────────────
 
