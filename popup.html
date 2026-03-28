@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bulk Poster</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+
+<!-- ─── Header ─────────────────────────────────────────────── -->
+<header class="app-header">
+  <div class="header-left">
+    <img src="icon48.png" class="app-logo" alt="logo" />
+    <div>
+      <div class="app-name">Bulk Poster</div>
+      <div class="app-sub">โพสต์หลายเพจพร้อมกัน</div>
+    </div>
+  </div>
+  <div id="connStatus" class="conn-badge conn-off">ยังไม่เชื่อมต่อ</div>
+</header>
+
+<!-- ─── Connect Screen ─────────────────────────────────────── -->
+<section id="connectScreen" class="connect-screen">
+  <div class="connect-icon">🔗</div>
+  <h2>เชื่อมต่อ Facebook</h2>
+  <p>กรุณาล็อกอิน Facebook ในเบราว์เซอร์นี้ก่อน<br/>แล้วกดปุ่มด้านล่างเพื่อเริ่มต้น</p>
+  <button id="btnConnect" class="btn btn-primary btn-lg">
+    <span class="btn-icon">🔌</span> เชื่อมต่อ Facebook
+  </button>
+  <div id="connectError" class="error-msg" style="display:none"></div>
+</section>
+
+<!-- ─── Main App ────────────────────────────────────────────── -->
+<section id="mainApp" style="display:none">
+
+  <!-- Tab Navigation -->
+  <nav class="tab-nav">
+    <button class="tab-btn active" data-tab="compose">
+      <span>📝</span> โพสต์
+    </button>
+    <button class="tab-btn" data-tab="scheduled">
+      <span>📅</span> ตั้งเวลา
+      <span id="scheduledBadge" class="badge" style="display:none">0</span>
+    </button>
+    <button class="tab-btn" data-tab="history">
+      <span>📊</span> ประวัติ
+    </button>
+  </nav>
+
+  <!-- ═══ TAB: Compose ═══════════════════════════════════════ -->
+  <div id="tab-compose" class="tab-content active">
+
+    <!-- Link Input -->
+    <div class="section-block">
+      <label class="field-label">🔗 ลิงก์ Card Link</label>
+      <div class="url-row">
+        <input id="linkInput" type="url" class="input-field"
+               placeholder="https://example.com/article" />
+        <button id="btnPreview" class="btn btn-ghost btn-sm">ดึง</button>
+      </div>
+    </div>
+
+    <!-- Link Preview Card -->
+    <div id="previewCard" class="preview-card" style="display:none">
+      <div id="previewImg" class="preview-img-wrap" style="display:none">
+        <img id="previewImgEl" alt="preview" />
+      </div>
+      <div class="preview-info">
+        <div id="previewSite" class="preview-site"></div>
+        <div id="previewTitle" class="preview-title"></div>
+        <div id="previewDesc" class="preview-desc"></div>
+      </div>
+    </div>
+
+    <!-- Caption -->
+    <div class="section-block">
+      <label class="field-label">💬 ข้อความ (ไม่บังคับ)</label>
+      <textarea id="msgInput" class="input-field textarea-field"
+                placeholder="ใส่ข้อความแคปชั่น..." rows="3"></textarea>
+    </div>
+
+    <!-- Page Selector -->
+    <div class="section-block">
+      <div class="pages-header">
+        <label class="field-label">📄 เลือกเพจ</label>
+        <div class="pages-actions">
+          <button id="btnSelectAll" class="btn btn-ghost btn-xs">เลือกทั้งหมด</button>
+          <button id="btnDeselectAll" class="btn btn-ghost btn-xs">ล้าง</button>
+          <button id="btnRefreshPages" class="btn btn-ghost btn-xs" title="โหลดใหม่">🔄</button>
+        </div>
+      </div>
+      <div id="pagesList" class="pages-list">
+        <div class="loading-row">
+          <div class="spinner"></div>
+          <span>กำลังโหลดเพจ...</span>
+        </div>
+      </div>
+      <div id="selectedCount" class="selected-count"></div>
+    </div>
+
+    <!-- Schedule Toggle -->
+    <div class="section-block schedule-toggle-wrap">
+      <label class="toggle-label">
+        <input type="checkbox" id="scheduleToggle" />
+        <span class="toggle-switch"></span>
+        <span class="toggle-text">⏰ ตั้งเวลาโพส</span>
+      </label>
+    </div>
+
+    <!-- Schedule DateTime -->
+    <div id="schedulePicker" class="section-block" style="display:none">
+      <label class="field-label">📅 วันและเวลา</label>
+      <input id="scheduleDateTime" type="datetime-local" class="input-field" />
+    </div>
+
+    <!-- Post Button -->
+    <div class="action-row">
+      <button id="btnPost" class="btn btn-primary btn-full">
+        <span id="postBtnIcon">🚀</span>
+        <span id="postBtnText">โพสต์ทันที</span>
+      </button>
+    </div>
+
+    <!-- Post Progress -->
+    <div id="postProgress" style="display:none" class="post-progress">
+      <div class="progress-bar-wrap">
+        <div id="progressBar" class="progress-bar" style="width:0%"></div>
+      </div>
+      <div id="progressText" class="progress-text">กำลังโพสต์...</div>
+    </div>
+
+    <!-- Post Results -->
+    <div id="postResults" style="display:none" class="post-results"></div>
+
+  </div>
+
+  <!-- ═══ TAB: Scheduled ══════════════════════════════════════ -->
+  <div id="tab-scheduled" class="tab-content">
+    <div class="tab-toolbar">
+      <span class="toolbar-title">รายการตั้งเวลา</span>
+      <button id="btnRefreshScheduled" class="btn btn-ghost btn-xs">🔄 โหลดใหม่</button>
+    </div>
+    <div id="scheduledList" class="card-list">
+      <div class="empty-state">
+        <div class="empty-icon">📅</div>
+        <div>ยังไม่มีรายการตั้งเวลา</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ TAB: History ════════════════════════════════════════ -->
+  <div id="tab-history" class="tab-content">
+    <div class="tab-toolbar">
+      <span class="toolbar-title">ประวัติการโพสต์</span>
+      <button id="btnClearHistory" class="btn btn-ghost btn-xs btn-danger-ghost">🗑 ล้าง</button>
+    </div>
+    <div id="historyList" class="card-list">
+      <div class="empty-state">
+        <div class="empty-icon">📊</div>
+        <div>ยังไม่มีประวัติการโพสต์</div>
+      </div>
+    </div>
+  </div>
+
+</section>
+
+<script src="popup.js"></script>
+</body>
+</html>

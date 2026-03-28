@@ -1,0 +1,57 @@
+{
+  "manifest_version": 3,
+  "name": "Bulk Poster — โพสต์หลายเพจพร้อมกัน",
+  "version": "1.0.0",
+  "description": "โพสต์ Card Link ไปหลายเพจ Facebook พร้อมกัน และตั้งเวลาโพสได้",
+  "permissions": [
+    "cookies",
+    "declarativeNetRequest",
+    "declarativeNetRequestWithHostAccess",
+    "storage",
+    "alarms",
+    "notifications",
+    "tabs"
+  ],
+  "host_permissions": [
+    "*://*.facebook.com/*",
+    "*://graph.facebook.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Bulk Poster",
+    "default_icon": {
+      "16": "icon16.png",
+      "48": "icon48.png",
+      "128": "icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  },
+  "declarative_net_request": {
+    "rule_resources": []
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://localhost:3500/*",
+        "http://127.0.0.1:3500/*",
+        "https://*.vercel.app/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_start"
+    }
+  ],
+  "externally_connectable": {
+    "matches": [
+      "http://localhost:3500/*",
+      "http://127.0.0.1:3500/*",
+      "https://*.vercel.app/*"
+    ]
+  }
+}
