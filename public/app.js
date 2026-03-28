@@ -85,6 +85,13 @@ function chrome_storage_set(key, val) {
 
 // ─── Connect ─────────────────────────────────────────────────
 
+document.getElementById('btnSaveToken')?.addEventListener('click', async () => {
+  const token = document.getElementById('manualToken').value.trim();
+  if (!token) return;
+  await sendExt({ type: 'SAVE_TOKEN', token });
+  alert('บันทึก Token แล้ว กด เชื่อมต่อ Facebook อีกครั้ง');
+});
+
 document.getElementById('btnConnect').addEventListener('click', async () => {
   const btn = document.getElementById('btnConnect');
   const errEl = document.getElementById('connectError');

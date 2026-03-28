@@ -36,6 +36,15 @@
   <p>ล็อกอิน Facebook ในเบราว์เซอร์นี้ก่อน<br/>แล้วกดปุ่มด้านล่าง</p>
   <button id="btnConnect" class="btn btn-primary btn-lg">🔌 เชื่อมต่อ Facebook</button>
   <div id="connectError" class="error-msg" style="display:none"></div>
+
+  <details style="margin-top:20px; color:var(--muted); font-size:12px; text-align:left; max-width:400px;">
+    <summary style="cursor:pointer; margin-bottom:10px;">⚙️ ใส่ Access Token เอง (ถ้าเชื่อมต่อไม่ได้)</summary>
+    <p style="margin-bottom:8px;">ไปที่ <a href="https://developers.facebook.com/tools/explorer/" target="_blank" style="color:var(--primary);">Graph API Explorer</a> → คัดลอก Access Token มาวางที่นี่</p>
+    <div class="url-row">
+      <input id="manualToken" type="text" class="input-field" placeholder="EAAxxxxxxxx..." />
+      <button id="btnSaveToken" class="btn btn-ghost">บันทึก</button>
+    </div>
+  </details>
 </div>
 
 <!-- ─── Main App ─────────────────────────────────────────────── -->
