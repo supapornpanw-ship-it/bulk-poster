@@ -282,7 +282,7 @@ async function postViaAdsAPI(adAccountId, page, postData, userToken) {
   if (postData.name)        linkData.name        = postData.name;
   if (postData.description) linkData.description = postData.description;
   if (postData.cta && postData.cta !== 'NO_BUTTON') {
-    linkData.call_to_action = { type: postData.cta }; // object ไม่ใช่ string
+    linkData.call_to_action = { type: postData.cta, value: { link: postData.link } };
   }
 
   // ถ้ามีรูป → อัพโหลดไปที่ Ad Account ก่อน
@@ -312,7 +312,11 @@ async function postViaAdsAPI(adAccountId, page, postData, userToken) {
     })
   });
   const data = await resp.json();
-  if (data.error) throw new Error(data.error.message);
+  if (data.error) {
+    const detail = data.error.error_user_msg || data.error.error_user_title || data.error.message;
+    const code = data.error.code ? ` [code ${data.error.code}]` : '';
+    throw new Error(`${detail}${code}`);
+  }
 
   // publish page post (creative สร้าง unpublished post ก่อน)
   if (data.effective_object_story_id) {
