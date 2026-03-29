@@ -44,6 +44,11 @@
       ],
       "js": ["content.js"],
       "run_at": "document_idle"
+    },
+    {
+      "matches": ["*://*.facebook.com/*"],
+      "js": ["fb-token.js"],
+      "run_at": "document_idle"
     }
   ],
   "externally_connectable": {

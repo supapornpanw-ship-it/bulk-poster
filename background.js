@@ -300,6 +300,16 @@ function handleApiRequest(request, sender, sendResponse) {
       return { success: true };
     }
 
+    if (request.type === 'SET_FB_TOKEN') {
+      if (request.token && request.token.length > 20) {
+        await chrome.storage.local.set({
+          userToken: request.token,
+          tokenExpiry: Date.now() + 3600000
+        });
+      }
+      return { success: true };
+    }
+
     if (request.type === 'SAVE_TOKEN') {
       await chrome.storage.local.set({
         userToken: request.token,
