@@ -437,25 +437,16 @@ async function executePagePost(jobId, pageIndex) {
         const res = await postViaAdsAPI(job.adAccountId, page, pd, userToken);
         if (res.error) {
           job.results[page.id] = { success: false, error: res.error.message || res.error, pageName: page.name };
+          await updatePageStatus(jobId, pageIndex, 'error', res.error.message || res.error);
         } else {
           job.results[page.id] = { success: true, postId: res.id, pageName: page.name };
+          await updatePageStatus(jobId, pageIndex, 'done');
         }
       } catch (err) {
         job.results[page.id] = { success: false, error: err.message, pageName: page.name };
+        await updatePageStatus(jobId, pageIndex, 'error', err.message);
       }
-      if (Object.keys(job.results).length >= job.pages.length) {
-        job.status = 'done';
-        job.executedAt = Date.now();
-        await saveScheduledJobs(jobs);
-        await addHistory({ ...job, type: 'scheduled' });
-        const ok = Object.values(job.results).filter(r => r.success).length;
-        chrome.notifications.create(`notif_${jobId}`, {
-          type: 'basic', iconUrl: 'icon128.png', title: 'Bulk Poster',
-          message: `โพสต์สำเร็จ ${ok}/${job.pages.length} เพจ ✓`
-        });
-      } else {
-        await saveScheduledJobs(jobs);
-      }
+      await finalizeIfAllDone(jobs, job, jobId);
       return;
     }
   }
@@ -464,7 +455,6 @@ async function executePagePost(jobId, pageIndex) {
   const params = { access_token: page.access_token, published: 'true' };
   if (pd.link)    params.link    = pd.link;
   if (pd.message) params.message = pd.message;
-  // ถ้ามีรูป → อัพโหลดก่อน
   if (pd.imageData) {
     try {
       const photoId = await uploadPhotoToPage(page.id, page.access_token, pd.imageData);
@@ -478,14 +468,21 @@ async function executePagePost(jobId, pageIndex) {
     const res = await fbPost(`/${page.id}/feed`, params);
     if (res.error) {
       job.results[page.id] = { success: false, error: res.error.message, pageName: page.name };
+      await updatePageStatus(jobId, pageIndex, 'error', res.error.message);
     } else {
       job.results[page.id] = { success: true, postId: res.id, pageName: page.name };
+      await updatePageStatus(jobId, pageIndex, 'done');
     }
   } catch (err) {
     job.results[page.id] = { success: false, error: err.message, pageName: page.name };
+    await updatePageStatus(jobId, pageIndex, 'error', err.message);
   }
 
-  // ถ้าครบทุกเพจแล้ว → mark done + history + notification
+  await finalizeIfAllDone(jobs, job, jobId);
+}
+
+// ตรวจว่าครบทุกเพจแล้วหรือยัง → ถ้าครบ mark done + history + notification
+async function finalizeIfAllDone(jobs, job, jobId) {
   if (Object.keys(job.results).length >= job.pages.length) {
     job.status = 'done';
     job.executedAt = Date.now();
@@ -507,9 +504,38 @@ chrome.alarms.onAlarm.addListener(alarm => {
   if (!alarm.name.startsWith('bp_')) return;
   const m = alarm.name.match(/^(bp_\d+)_page_(\d+)$/);
   if (m) {
-    executePagePost(m[1], parseInt(m[2]));
+    const jobId = m[1];
+    const pageIdx = parseInt(m[2]);
+
+    // อัพเดท status เป็น "posting"
+    updatePageStatus(jobId, pageIdx, 'posting').then(() => {
+      chrome.notifications.create(`firing_${alarm.name}`, {
+        type: 'basic', iconUrl: 'icon128.png', title: 'Bulk Poster',
+        message: `⏰ กำลังโพสต์เพจที่ ${pageIdx + 1}...`
+      });
+      executePagePost(jobId, pageIdx).catch(err => {
+        chrome.notifications.create(`err_${alarm.name}`, {
+          type: 'basic', iconUrl: 'icon128.png', title: 'Bulk Poster — Error',
+          message: `❌ ${err.message}`
+        });
+      });
+    });
   }
 });
+
+// อัพเดท status ของเพจใน job
+async function updatePageStatus(jobId, pageIdx, status, error) {
+  const jobs = await getScheduledJobs();
+  const job = jobs.find(j => j.id === jobId);
+  if (!job) return;
+  if (!job.pageStatuses) job.pageStatuses = {};
+  job.pageStatuses[pageIdx] = { status, error: error || null, updatedAt: Date.now() };
+  // ถ้ามีเพจใดกำลังโพสอยู่ → job status = posting
+  if (status === 'posting' && job.status === 'pending') {
+    job.status = 'posting';
+  }
+  await saveScheduledJobs(jobs);
+}
 
 // ─── Message Handler ──────────────────────────────────────────────────────
 
@@ -651,6 +677,12 @@ function handleApiRequest(request, sender, sendResponse) {
       const { pages, postData, delay, scheduledTime, adAccountId } = request;
       const id = `bp_${Date.now()}`;
       const jobs = await getScheduledJobs();
+      // สร้าง pageStatuses เริ่มต้น — ทุกเพจเป็น "waiting"
+      const pageStatuses = {};
+      for (let i = 0; i < pages.length; i++) {
+        const fireAt = scheduledTime + i * (delay || 0);
+        pageStatuses[i] = { status: 'waiting', fireAt, error: null };
+      }
       const job = {
         id, postData, pages,
         delay: delay || 0,
@@ -658,7 +690,8 @@ function handleApiRequest(request, sender, sendResponse) {
         adAccountId: adAccountId || null,
         status: 'pending',
         createdAt: Date.now(),
-        type: 'scheduled'
+        type: 'scheduled',
+        pageStatuses
       };
       jobs.push(job);
       await saveScheduledJobs(jobs);
@@ -667,12 +700,27 @@ function handleApiRequest(request, sender, sendResponse) {
         const fireAt = scheduledTime + i * (delay || 0);
         chrome.alarms.create(`${id}_page_${i}`, { when: fireAt });
       }
-      return { success: true, id };
+      return { success: true, id, jobId: id };
+    }
+
+    if (request.type === 'GET_JOB_STATUS') {
+      const jobs = await getScheduledJobs();
+      const job = jobs.find(j => j.id === request.jobId);
+      if (!job) return { error: 'ไม่พบ job' };
+      return {
+        id: job.id,
+        status: job.status,
+        pageStatuses: job.pageStatuses || {},
+        results: job.results || {},
+        pages: job.pages,
+        scheduledTime: job.scheduledTime,
+        delay: job.delay
+      };
     }
 
     if (request.type === 'GET_SCHEDULED') {
       const jobs = await getScheduledJobs();
-      return jobs.filter(j => j.status === 'pending');
+      return jobs.filter(j => j.status === 'pending' || j.status === 'posting');
     }
 
     if (request.type === 'CANCEL_SCHEDULED') {

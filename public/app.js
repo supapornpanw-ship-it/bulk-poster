@@ -320,22 +320,123 @@ async function doSchedule(selPages, postData, delay, scheduledTime, adAccountId)
   const btn = document.getElementById('btnPost');
   btn.disabled = true;
   try {
-    await sendExt({ type: 'SCHEDULE_POST', pages: selPages, postData, delay, scheduledTime, adAccountId });
-    const confirm = document.getElementById('schedConfirm');
-    confirm.innerHTML = `
+    const res = await sendExt({ type: 'SCHEDULE_POST', pages: selPages, postData, delay, scheduledTime, adAccountId });
+    const jobId = res.jobId || res.id;
+    const confirmEl = document.getElementById('schedConfirm');
+    confirmEl.innerHTML = `
       ✅ <strong>ตั้งเวลาสำเร็จ!</strong><br/>
       📅 เริ่มโพส: ${fmtDate(scheduledTime)}<br/>
       📄 จำนวน: ${selPages.length} เพจ<br/>
       ${delay ? `⏱ ห่างระหว่างเพจ: ${Math.round(delay/60000)} นาที` : ''}
     `;
-    confirm.style.display = '';
+    confirmEl.style.display = '';
     loadScheduled();
     updateSchedBadge();
+    // เริ่ม polling สถานะ
+    if (jobId) startJobPolling(jobId);
   } catch (e) {
     alert('เกิดข้อผิดพลาด: ' + e.message);
   } finally {
     btn.disabled = false;
   }
+}
+
+// ─── Live Job Status Polling ──────────────────────────────────
+let activePollingJobId = null;
+let pollingTimer = null;
+
+function startJobPolling(jobId) {
+  // หยุด polling เก่า
+  if (pollingTimer) clearInterval(pollingTimer);
+  activePollingJobId = jobId;
+
+  // สลับไปแท็บตั้งเวลา
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+  document.querySelector('[data-tab="scheduled"]').classList.add('active');
+  document.getElementById('tab-scheduled').classList.add('active');
+
+  // poll ทุก 3 วินาที
+  pollJobStatus(jobId);
+  pollingTimer = setInterval(() => pollJobStatus(jobId), 3000);
+}
+
+async function pollJobStatus(jobId) {
+  try {
+    const res = await sendExt({ type: 'GET_JOB_STATUS', jobId });
+    if (res.error) return;
+    renderJobLiveStatus(res);
+    // หยุด poll ถ้า job เสร็จแล้ว
+    if (res.status === 'done' || res.status === 'cancelled') {
+      if (pollingTimer) clearInterval(pollingTimer);
+      pollingTimer = null;
+      activePollingJobId = null;
+      loadScheduled();
+      updateSchedBadge();
+    }
+  } catch {}
+}
+
+function renderJobLiveStatus(job) {
+  const el = document.getElementById('schedList');
+  const pages = job.pages || [];
+  const statuses = job.pageStatuses || {};
+  const results = job.results || {};
+
+  let html = `<div class="live-status-card">`;
+  html += `<div class="live-status-header">`;
+  html += `<span class="live-pulse ${job.status === 'posting' ? 'active' : ''}"></span>`;
+  html += `<strong>${job.status === 'done' ? '✅ โพสต์เสร็จแล้ว' : job.status === 'posting' ? '🔄 กำลังโพสต์...' : '⏰ รอเวลาโพสต์'}</strong>`;
+  html += `</div>`;
+
+  // สรุป
+  const doneCount = Object.values(statuses).filter(s => s.status === 'done').length;
+  const errorCount = Object.values(statuses).filter(s => s.status === 'error').length;
+  const postingCount = Object.values(statuses).filter(s => s.status === 'posting').length;
+  const waitingCount = pages.length - doneCount - errorCount - postingCount;
+
+  html += `<div class="live-summary">`;
+  if (doneCount) html += `<span class="live-badge lb-done">✅ ${doneCount}</span>`;
+  if (postingCount) html += `<span class="live-badge lb-posting">🔄 ${postingCount}</span>`;
+  if (errorCount) html += `<span class="live-badge lb-error">❌ ${errorCount}</span>`;
+  if (waitingCount > 0) html += `<span class="live-badge lb-waiting">⏳ ${waitingCount}</span>`;
+  html += `</div>`;
+
+  // แต่ละเพจ
+  html += `<div class="live-page-list">`;
+  for (let i = 0; i < pages.length; i++) {
+    const page = pages[i];
+    const ps = statuses[i] || { status: 'waiting' };
+    const result = results[page.id];
+    let icon, cls, detail = '';
+
+    if (ps.status === 'done' || (result && result.success)) {
+      icon = '✅'; cls = 'lp-done';
+    } else if (ps.status === 'error' || (result && !result.success)) {
+      icon = '❌'; cls = 'lp-error';
+      detail = ps.error || result?.error || 'ไม่ทราบสาเหตุ';
+    } else if (ps.status === 'posting') {
+      icon = '🔄'; cls = 'lp-posting';
+      detail = 'กำลังโพสต์...';
+    } else {
+      icon = '⏳'; cls = 'lp-waiting';
+      if (ps.fireAt) detail = 'โพสเวลา ' + fmtTime(ps.fireAt);
+    }
+
+    html += `<div class="live-page-row ${cls}">`;
+    html += `<span class="lp-icon">${icon}</span>`;
+    html += `<span class="lp-name">${page.name}</span>`;
+    if (detail) html += `<span class="lp-detail">${detail}</span>`;
+    html += `</div>`;
+  }
+  html += `</div></div>`;
+
+  el.innerHTML = html;
+}
+
+function fmtTime(ts) {
+  if (!ts) return '';
+  return new Date(ts).toLocaleString('th-TH', { hour: '2-digit', minute: '2-digit' });
 }
 
 // ─── Scheduled ────────────────────────────────────────────────
@@ -354,6 +455,9 @@ async function loadScheduled() {
 
 function renderScheduled(jobs) {
   const el = document.getElementById('schedList');
+  // ถ้ากำลัง polling อยู่ → ไม่ต้อง render ทับ (pollJobStatus จะ render เอง)
+  if (activePollingJobId && jobs.some(j => j.id === activePollingJobId)) return;
+
   if (!jobs.length) { el.innerHTML = `<div class="empty-state">📅 ยังไม่มีรายการตั้งเวลา</div>`; return; }
   el.innerHTML = '';
   const list = document.createElement('div');
@@ -361,17 +465,32 @@ function renderScheduled(jobs) {
   jobs.forEach(job => {
     const card = document.createElement('div');
     card.className = 'job-card';
+
+    // สร้าง per-page status HTML
+    const statuses = job.pageStatuses || {};
+    let pagesHtml = '';
+    (job.pages || []).forEach((p, i) => {
+      const ps = statuses[i] || { status: 'waiting' };
+      let icon;
+      if (ps.status === 'done') icon = '✅';
+      else if (ps.status === 'error') icon = '❌';
+      else if (ps.status === 'posting') icon = '🔄';
+      else icon = '⏳';
+      pagesHtml += `<span class="page-status-chip">${icon} ${p.name}</span>`;
+    });
+
     card.innerHTML = `
       <div class="job-row1">
-        <span class="job-badge jb-sched">⏰ ตั้งเวลา</span>
+        <span class="job-badge ${job.status === 'posting' ? 'jb-posting' : 'jb-sched'}">${job.status === 'posting' ? '🔄 กำลังโพส' : '⏰ ตั้งเวลา'}</span>
         <a href="${job.postData?.link || job.link || ''}" target="_blank" class="job-link">${trunc(job.postData?.link || job.link || '', 50)}</a>
       </div>
       <div class="job-meta">
         <span>🕐 ${fmtDate(job.scheduledTime)}</span>
         <span>${job.pages?.length || 0} เพจ ${job.delay ? '· ห่าง ' + Math.round(job.delay/60000) + ' นาที' : ''}</span>
       </div>
-      <div class="job-pages">${job.pages?.map(p => p.name).join(' · ')}</div>
+      <div class="job-page-statuses">${pagesHtml}</div>
       <div class="job-actions">
+        <button class="btn btn-ghost btn-sm" style="color:var(--primary)" data-track="${job.id}">📊 ดูสถานะ</button>
         <button class="btn btn-ghost btn-sm" style="color:var(--danger)" data-id="${job.id}">ยกเลิก</button>
       </div>
     `;
@@ -379,6 +498,9 @@ function renderScheduled(jobs) {
       if (!confirm('ยืนยันยกเลิก?')) return;
       await sendExt({ type: 'CANCEL_SCHEDULED', id: e.target.dataset.id });
       loadScheduled();
+    });
+    card.querySelector('[data-track]').addEventListener('click', () => {
+      startJobPolling(job.id);
     });
     list.appendChild(card);
   });
@@ -397,7 +519,7 @@ async function updateSchedBadge(n) {
 // auto-refresh scheduled list ทุก 30 วินาที
 setInterval(async () => {
   const tab = document.querySelector('.tab-btn.active');
-  if (tab && tab.dataset.tab === 'sched') loadScheduled();
+  if (tab && tab.dataset.tab === 'scheduled' && !activePollingJobId) loadScheduled();
   updateSchedBadge();
 }, 30000);
 
