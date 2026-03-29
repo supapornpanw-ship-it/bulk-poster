@@ -51,9 +51,7 @@ let isPosting = false;
 // ─── Init ─────────────────────────────────────────────────────
 async function init() {
   document.getElementById('noExtScreen').style.display = 'none';
-  const connected = localStorage.getItem('bp_connected') === 'true';
-  if (connected) { showApp(); loadPages(); loadAdAccounts(); }
-  else { document.getElementById('connectScreen').style.display = ''; }
+  document.getElementById('connectScreen').style.display = '';
 }
 
 function showApp() {
