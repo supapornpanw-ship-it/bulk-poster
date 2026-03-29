@@ -254,6 +254,32 @@ async function postToPage(pageId, pageToken, { link, message, scheduledTime }) {
   return fbPost(`/${pageId}/feed`, params);
 }
 
+// ─── Photo Upload ─────────────────────────────────────────────────────────
+
+// อัพโหลดรูปขึ้น Facebook แบบ unpublished แล้วคืน photo_id
+// วิธีนี้ข้ามข้อจำกัด #100 (ต้องเป็นเจ้าของ URL) ได้
+async function uploadPhotoToPage(pageId, pageToken, imageDataUrl) {
+  const [header, base64] = imageDataUrl.split(',');
+  const mimeType = header.match(/:(.*?);/)[1];
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  const blob = new Blob([bytes], { type: mimeType });
+
+  const formData = new FormData();
+  formData.append('access_token', pageToken);
+  formData.append('published', 'false');
+  formData.append('source', blob, 'image.jpg');
+
+  const resp = await fetch(`https://graph.facebook.com/v20.0/${pageId}/photos`, {
+    method: 'POST',
+    body: formData
+  });
+  const data = await resp.json();
+  if (data.error) throw new Error(data.error.message);
+  return data.id;
+}
+
 // ─── OG Preview ──────────────────────────────────────────────────────────
 
 async function fetchOgData(url) {
@@ -310,13 +336,18 @@ async function executePagePost(jobId, pageIndex) {
   if (!page) return;
 
   const pd = job.postData || {};
-  const params = { access_token: page.access_token };
-  if (pd.link)        params.link        = pd.link;
-  if (pd.message)     params.message     = pd.message;
-  if (pd.name)        params.name        = pd.name;
-  if (pd.caption)     params.caption     = pd.caption;
-  if (pd.description) params.description = pd.description;
-  params.published = 'true';
+  const params = { access_token: page.access_token, published: 'true' };
+  if (pd.link)    params.link    = pd.link;
+  if (pd.message) params.message = pd.message;
+  // ถ้ามีรูป → อัพโหลดก่อน
+  if (pd.imageData) {
+    try {
+      const photoId = await uploadPhotoToPage(page.id, page.access_token, pd.imageData);
+      params.object_attachment = photoId;
+    } catch (e) {
+      console.warn('Scheduled photo upload failed:', e.message);
+    }
+  }
 
   if (!job.results) job.results = {};
   try {
@@ -402,13 +433,19 @@ function handleApiRequest(request, sender, sendResponse) {
 
     if (request.type === 'POST_TO_PAGE') {
       const { page, postData } = request;
-      const params = { access_token: page.access_token };
-      if (postData.link)        params.link        = postData.link;
-      if (postData.message)     params.message     = postData.message;
-      if (postData.name)        params.name        = postData.name;
-      if (postData.caption)     params.caption     = postData.caption;
-      if (postData.description) params.description = postData.description;
-      params.published = 'true';
+      const params = { access_token: page.access_token, published: 'true' };
+      if (postData.link)    params.link    = postData.link;
+      if (postData.message) params.message = postData.message;
+      // ถ้ามีรูป → อัพโหลดก่อน แล้วใช้ object_attachment (ข้ามข้อจำกัด #100)
+      if (postData.imageData) {
+        try {
+          const photoId = await uploadPhotoToPage(page.id, page.access_token, postData.imageData);
+          params.object_attachment = photoId;
+        } catch (e) {
+          // อัพรูปไม่ได้ → โพสต์ปกติโดยไม่มีรูป
+          console.warn('Photo upload failed:', e.message);
+        }
+      }
       const result = await fbPost(`/${page.id}/feed`, params);
       return result;
     }

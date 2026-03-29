@@ -183,6 +183,7 @@ document.getElementById('destLink').addEventListener('blur', async function () {
 // ─── Image Upload ─────────────────────────────────────────────
 const imageDrop = document.getElementById('imageDrop');
 const imageFile = document.getElementById('imageFile');
+let currentImageData = null; // base64 data URL ของรูปที่เลือก
 
 imageDrop.addEventListener('click', () => imageFile.click());
 imageFile.addEventListener('change', (e) => {
@@ -190,6 +191,7 @@ imageFile.addEventListener('change', (e) => {
   if (!file) return;
   const reader = new FileReader();
   reader.onload = (ev) => {
+    currentImageData = ev.target.result;
     document.getElementById('imagePreview').src = ev.target.result;
     document.getElementById('imagePreview').style.display = '';
     document.getElementById('imagePrompt').style.display = 'none';
@@ -243,7 +245,7 @@ document.getElementById('btnPost').addEventListener('click', async () => {
   if (!selectedIds.size) return alert('กรุณาเลือกเพจอย่างน้อย 1 เพจ');
 
   const selPages = pages.filter(p => selectedIds.has(p.id));
-  const postData = { link, message, name, caption, description };
+  const postData = { link, message, name, caption, description, imageData: currentImageData };
 
   if (isSchedule) {
     const dtVal = document.getElementById('schedDT').value;
