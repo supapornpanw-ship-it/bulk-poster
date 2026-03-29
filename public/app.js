@@ -62,9 +62,20 @@ function showApp() {
 // ─── Connect ─────────────────────────────────────────────────
 document.getElementById('btnSaveToken')?.addEventListener('click', async () => {
   const token = document.getElementById('manualToken').value.trim();
-  if (!token) return;
-  await sendExt({ type: 'SAVE_TOKEN', token });
-  alert('บันทึก Token แล้ว กด "เชื่อมต่อ Facebook" อีกครั้ง');
+  const err = document.getElementById('connectError');
+  if (!token) { err.textContent = '⚠ กรุณาวาง Token ก่อน'; err.style.display = ''; return; }
+  if (!token.startsWith('EAA')) { err.textContent = '⚠ Token ต้องขึ้นต้นด้วย EAA'; err.style.display = ''; return; }
+  err.style.display = 'none';
+  const btn = document.getElementById('btnSaveToken');
+  btn.disabled = true; btn.textContent = 'กำลังเชื่อมต่อ...';
+  try {
+    await sendExt({ type: 'SAVE_TOKEN', token });
+    await sendExt({ type: 'PREPARE_COOKIES' });
+    showApp(); loadPages(); loadAdAccounts();
+  } catch (e) {
+    err.textContent = '⚠ ' + e.message; err.style.display = '';
+    btn.disabled = false; btn.textContent = 'เชื่อมต่อ';
+  }
 });
 
 document.getElementById('btnConnect').addEventListener('click', async () => {

@@ -50,6 +50,21 @@ body {
 .msg-box h2 { font-size: 22px; font-weight: 700; }
 .msg-box p  { color: var(--muted); line-height: 1.7; font-size: 14px; }
 
+.token-steps {
+  width: 100%;
+  text-align: left;
+  background: rgba(79,110,247,.08);
+  border: 1px solid rgba(79,110,247,.25);
+  border-radius: var(--radius-s);
+  padding: 14px 16px;
+  font-size: 13px;
+}
+.step-label { font-weight: 600; margin-bottom: 8px; }
+.step-list { padding-left: 20px; color: var(--muted); line-height: 2; }
+.step-list a { color: var(--primary); }
+.step-list strong { color: var(--text); }
+.step-list code { background: rgba(255,255,255,.08); padding: 1px 5px; border-radius: 4px; font-size: 11px; }
+
 .manual-token-wrap {
   width: 100%;
   text-align: left;
