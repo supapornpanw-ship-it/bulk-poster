@@ -308,13 +308,21 @@ async function executeJob(jobId) {
   job.status = 'posting';
   await saveScheduledJobs(jobs);
 
+  const pd = job.postData || {};
   const results = {};
-  for (const page of job.pages) {
+
+  for (let i = 0; i < job.pages.length; i++) {
+    const page = job.pages[i];
     try {
-      const res = await postToPage(page.id, page.access_token, {
-        link: job.link,
-        message: job.message
-      });
+      const params = { access_token: page.access_token };
+      if (pd.link)        params.link        = pd.link;
+      if (pd.message)     params.message     = pd.message;
+      if (pd.name)        params.name        = pd.name;
+      if (pd.caption)     params.caption     = pd.caption;
+      if (pd.description) params.description = pd.description;
+      params.published = 'true';
+
+      const res = await fbPost(`/${page.id}/feed`, params);
       if (res.error) {
         results[page.id] = { success: false, error: res.error.message, pageName: page.name };
       } else {
@@ -322,6 +330,11 @@ async function executeJob(jobId) {
       }
     } catch (err) {
       results[page.id] = { success: false, error: err.message, pageName: page.name };
+    }
+
+    // delay ระหว่างเพจ (ยกเว้นเพจสุดท้าย)
+    if (job.delay > 0 && i < job.pages.length - 1) {
+      await new Promise(r => setTimeout(r, job.delay));
     }
   }
 
@@ -471,11 +484,14 @@ function handleApiRequest(request, sender, sendResponse) {
     }
 
     if (request.type === 'SCHEDULE_POST') {
-      const { pages, link, message, scheduledTime } = request;
+      const { pages, postData, delay, scheduledTime } = request;
       const id = `bp_${Date.now()}`;
       const jobs = await getScheduledJobs();
       const job = {
-        id, link, message, pages,
+        id,
+        postData,
+        pages,
+        delay: delay || 0,
         scheduledTime,
         status: 'pending',
         createdAt: Date.now(),
