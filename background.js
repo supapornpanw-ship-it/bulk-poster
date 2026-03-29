@@ -258,11 +258,12 @@ async function postToPage(pageId, pageToken, { link, message, scheduledTime }) {
 
 // อัพโหลดรูปขึ้น Ad Account — คืน image_hash
 async function uploadAdImage(adAccountId, pageToken, imageDataUrl) {
+  const cleanId = String(adAccountId).replace(/^act_/, '');
   const [header, base64] = imageDataUrl.split(',');
   const formData = new FormData();
   formData.append('access_token', pageToken);
   formData.append('bytes', base64);
-  const resp = await fetch(`https://graph.facebook.com/v20.0/act_${adAccountId}/adimages`, {
+  const resp = await fetch(`https://graph.facebook.com/v20.0/act_${cleanId}/adimages`, {
     method: 'POST',
     body: formData
   });
@@ -302,7 +303,8 @@ async function postViaAdsAPI(adAccountId, page, postData, userToken) {
   });
 
   // สร้าง creative → สร้าง page post อัตโนมัติ
-  const resp = await fetch(`https://graph.facebook.com/v20.0/act_${adAccountId}/adcreatives`, {
+  const cleanId = String(adAccountId).replace(/^act_/, '');
+  const resp = await fetch(`https://graph.facebook.com/v20.0/act_${cleanId}/adcreatives`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
