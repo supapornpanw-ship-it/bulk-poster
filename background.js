@@ -97,39 +97,32 @@ async function extractTokenFromPage(pageUrl) {
 }
 
 async function getOrExtractToken() {
-  // ใช้ token ที่ user ใส่เองก่อน
   const { userToken, tokenExpiry } = await chrome.storage.local.get(['userToken', 'tokenExpiry']);
   if (userToken && tokenExpiry && Date.now() < tokenExpiry) return userToken;
+  return null;
+}
 
-  // ลองดึงจากหลายหน้า
-  const pages = [
-    'https://www.facebook.com/',
-    'https://business.facebook.com/',
-    'https://www.facebook.com/pages/',
-  ];
-  for (const url of pages) {
-    const token = await extractTokenFromPage(url).catch(() => null);
-    if (token) {
-      await chrome.storage.local.set({ userToken: token, tokenExpiry: Date.now() + 3600000 });
-      return token;
-    }
+async function extractAndSaveToken() {
+  const token = await extractTokenFromPage('https://www.facebook.com/').catch(() => null);
+  if (token) {
+    await chrome.storage.local.set({ userToken: token, tokenExpiry: Date.now() + 3600000 });
+    return token;
   }
-  return null; // ไม่พบ — ใช้ cookie auth แทน
+  return null;
 }
 
 async function getPages() {
-  // ลองใช้ cookie auth ก่อน (ไม่ต้องมี token)
-  let data = await fbGet('/me/accounts?fields=id,name,access_token,picture.type(square){url}&limit=200');
+  const { userToken, tokenExpiry } = await chrome.storage.local.get(['userToken', 'tokenExpiry']);
+  const token = (userToken && tokenExpiry && Date.now() < tokenExpiry) ? userToken : null;
+
+  const data = await fbGet(
+    '/me/accounts?fields=id,name,access_token,picture.type(square){url}&limit=200',
+    token || undefined
+  );
+
   if (!data.error) return data;
 
-  // ถ้าไม่ได้ ลองหา token
-  const token = await getOrExtractToken();
-  if (token) {
-    data = await fbGet('/me/accounts?fields=id,name,access_token,picture.type(square){url}&limit=200', token);
-    if (!data.error) return data;
-  }
-
-  throw new Error('ไม่สามารถโหลดเพจได้: ' + (data.error?.message || 'กรุณาล็อกอิน Facebook แล้วลองอีกครั้ง'));
+  throw new Error(data.error?.message || 'กรุณาเปิด Facebook.com แล้ว Reload Extension ใหม่ หรือใส่ Access Token เอง');
 }
 
 async function postToPage(pageId, pageToken, { link, message, scheduledTime }) {
@@ -252,6 +245,8 @@ function handleApiRequest(request, sender, sendResponse) {
       if (!cookies.length) throw new Error('ไม่พบ Cookie Facebook กรุณาล็อกอิน Facebook ก่อน');
       const str = formatCookieString(cookies);
       await setupCookieRules(str);
+      // ดึง token ทันทีหลัง setup (cookies พร้อมแล้ว)
+      extractAndSaveToken().catch(() => {});
       await chrome.storage.local.set({ connected: true, connectedAt: Date.now() });
       return { success: true };
     }

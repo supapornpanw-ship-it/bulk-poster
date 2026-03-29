@@ -18,7 +18,7 @@ function sendExt(message) {
     const timer = setTimeout(() => {
       delete pending[id];
       reject(new Error('หมดเวลารอ Extension'));
-    }, 20000);
+    }, 45000);
     pending[id] = (res) => {
       clearTimeout(timer);
       if (!res) return reject(new Error('ไม่ได้รับการตอบกลับ'));
