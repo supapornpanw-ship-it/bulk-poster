@@ -1,48 +1,46 @@
-// fb-token.js — Content script ที่รันบน facebook.com
-// ดึง access token จาก JavaScript context ของหน้าเว็บแล้วส่งให้ background.js
+// fb-token.js — MAIN world content script บน facebook.com
+// เข้าถึง window variables โดยตรงเพื่อดึง access token
 
 (function () {
-  // inject script tag เข้าไปใน page context เพื่อเข้าถึง window variables
-  const s = document.createElement('script');
-  s.textContent = `(function(){
-    var tryFind = function(){
-      var token = null;
-      try {
-        // Method 1: window.__accessToken
-        if(window.__accessToken) return window.__accessToken;
+  function findToken() {
+    // ลอง window globals ต่างๆ ที่ Facebook ใช้
+    const candidates = [
+      window.__accessToken,
+      window.Env && window.Env.accessToken,
+      window.__INITIAL_REDUX_STATE__ && window.__INITIAL_REDUX_STATE__.Authentication && window.__INITIAL_REDUX_STATE__.Authentication.accessToken,
+    ];
 
-        // Method 2: Env object
-        if(window.Env && window.Env.accessToken) return window.Env.accessToken;
+    for (const t of candidates) {
+      if (t && typeof t === 'string' && t.length > 30) return t;
+    }
 
-        // Method 3: scan all script tags for accessToken pattern
-        var scripts = document.querySelectorAll('script');
-        for(var i=0; i<scripts.length; i++){
-          var t = scripts[i].textContent;
-          var m = t.match(/"accessToken":"([^"]{30,})"/) ||
-                  t.match(/"access_token":"([^"]{30,})"/) ||
-                  t.match(/access_token=([^&"'\s]{30,})/);
-          if(m && m[1]) return m[1];
-        }
+    // สแกน script tags ที่ embed ไว้ใน page
+    const scripts = document.querySelectorAll('script:not([src])');
+    for (let i = 0; i < scripts.length; i++) {
+      const text = scripts[i].textContent;
+      const m = text.match(/"accessToken":"([^"]{50,})"/) ||
+                text.match(/"access_token":"([^"]{50,})"/) ||
+                text.match(/\\"accessToken\\":\\"([^"\\]{50,})\\"/);
+      if (m && m[1]) return m[1];
+    }
 
-        // Method 4: scan page source
-        var html = document.documentElement.innerHTML;
-        var m2 = html.match(/"accessToken":"([^"]{30,})"/) ||
-                 html.match(/"access_token":"([^"]{30,})"/) ||
-                 html.match(/\\"accessToken\\":\\"([^\\\\]{30,})\\"/);
-        if(m2 && m2[1]) return m2[1];
+    return null;
+  }
 
-      } catch(e) {}
-      return null;
-    };
-    var token = tryFind();
-    if(token) window.postMessage({type:'BP_TOKEN_FOUND', token:token}, '*');
-  })();`;
-  (document.head || document.documentElement).appendChild(s);
-  s.remove();
+  function tryAndSend() {
+    const token = findToken();
+    if (token) {
+      // ส่งผ่าน CustomEvent ไปยัง isolated world bridge
+      window.dispatchEvent(new CustomEvent('BP_TOKEN_FOUND', { detail: token }));
+    }
+  }
 
-  // รับ token จาก injected script แล้วส่งให้ background.js
-  window.addEventListener('message', function (e) {
-    if (e.source !== window || !e.data || e.data.type !== 'BP_TOKEN_FOUND') return;
-    chrome.runtime.sendMessage({ type: 'SET_FB_TOKEN', token: e.data.token });
-  });
+  // ลองทันที
+  tryAndSend();
+  // ลองอีกครั้งหลัง page โหลดเสร็จ
+  if (document.readyState !== 'complete') {
+    window.addEventListener('load', tryAndSend, { once: true });
+  }
+  setTimeout(tryAndSend, 2000);
+  setTimeout(tryAndSend, 5000);
 })();

@@ -48,6 +48,12 @@
     {
       "matches": ["*://*.facebook.com/*"],
       "js": ["fb-token.js"],
+      "run_at": "document_idle",
+      "world": "MAIN"
+    },
+    {
+      "matches": ["*://*.facebook.com/*"],
+      "js": ["fb-bridge.js"],
       "run_at": "document_idle"
     }
   ],
