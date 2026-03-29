@@ -162,8 +162,6 @@ document.getElementById('destLink').addEventListener('blur', async function () {
     const og = await sendExt({ type: 'FETCH_OG', url });
     if (og.title && !document.getElementById('cardTitle').value)
       document.getElementById('cardTitle').value = og.title;
-    if (og.siteName && !document.getElementById('displayLink').value)
-      document.getElementById('displayLink').value = og.siteName;
     if (og.description && !document.getElementById('cardDesc').value)
       document.getElementById('cardDesc').value = og.description;
     // show OG preview
@@ -233,32 +231,33 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
 // ─── Post ─────────────────────────────────────────────────────
 document.getElementById('btnPost').addEventListener('click', async () => {
   if (isPosting) return;
-  const link     = document.getElementById('destLink').value.trim();
-  const message  = document.getElementById('postMsg').value.trim();
-  const name     = document.getElementById('cardTitle').value.trim();
-  const caption  = document.getElementById('displayLink').value.trim();
+  const link        = document.getElementById('destLink').value.trim();
+  const message     = document.getElementById('postMsg').value.trim();
+  const name        = document.getElementById('cardTitle').value.trim();
   const description = document.getElementById('cardDesc').value.trim();
-  const delay    = parseInt(document.getElementById('delaySel').value) || 0;
-  const isSchedule = document.getElementById('schedToggle').checked;
+  const cta         = document.getElementById('ctaSel').value;
+  const delay       = parseInt(document.getElementById('delaySel').value) || 0;
+  const isSchedule  = document.getElementById('schedToggle').checked;
+  const adAccountId = document.getElementById('adAccountSel').value || null;
 
   if (!link) return alert('กรุณาใส่ Destination Link');
   if (!selectedIds.size) return alert('กรุณาเลือกเพจอย่างน้อย 1 เพจ');
 
   const selPages = pages.filter(p => selectedIds.has(p.id));
-  const postData = { link, message, name, caption, description, imageData: currentImageData };
+  const postData = { link, message, name, description, cta, imageData: currentImageData };
 
   if (isSchedule) {
     const dtVal = document.getElementById('schedDT').value;
     if (!dtVal) return alert('กรุณาเลือกวันและเวลา');
     const ts = new Date(dtVal).getTime();
     if (ts <= Date.now()) return alert('กรุณาเลือกเวลาในอนาคต');
-    await doSchedule(selPages, postData, delay, ts);
+    await doSchedule(selPages, postData, delay, ts, adAccountId);
   } else {
-    await doPostNow(selPages, postData, delay);
+    await doPostNow(selPages, postData, delay, adAccountId);
   }
 });
 
-async function doPostNow(selPages, postData, delay) {
+async function doPostNow(selPages, postData, delay, adAccountId) {
   isPosting = true;
   const btn     = document.getElementById('btnPost');
   const progEl  = document.getElementById('progressWrap');
@@ -285,7 +284,7 @@ async function doPostNow(selPages, postData, delay) {
     logEl.scrollTop = logEl.scrollHeight;
 
     try {
-      const res = await sendExt({ type: 'POST_TO_PAGE', page, postData });
+      const res = await sendExt({ type: 'POST_TO_PAGE', page, postData, adAccountId });
       if (res.error || (res.data && res.data.error)) {
         const errMsg = res.error?.message || res.data?.error?.message || 'ผิดพลาด';
         logRow.className = 'log-row log-err';
@@ -316,11 +315,11 @@ async function doPostNow(selPages, postData, delay) {
   await sendExt({ type: 'ADD_HISTORY', entry: { link: postData.link, message: postData.message, pages: selPages, postedAt: Date.now(), type: 'immediate' } }).catch(() => {});
 }
 
-async function doSchedule(selPages, postData, delay, scheduledTime) {
+async function doSchedule(selPages, postData, delay, scheduledTime, adAccountId) {
   const btn = document.getElementById('btnPost');
   btn.disabled = true;
   try {
-    await sendExt({ type: 'SCHEDULE_POST', pages: selPages, postData, delay, scheduledTime });
+    await sendExt({ type: 'SCHEDULE_POST', pages: selPages, postData, delay, scheduledTime, adAccountId });
     const confirm = document.getElementById('schedConfirm');
     confirm.innerHTML = `
       ✅ <strong>ตั้งเวลาสำเร็จ!</strong><br/>

@@ -256,6 +256,79 @@ async function postToPage(pageId, pageToken, { link, message, scheduledTime }) {
 
 // ─── Photo Upload ─────────────────────────────────────────────────────────
 
+// อัพโหลดรูปขึ้น Ad Account — คืน image_hash
+async function uploadAdImage(adAccountId, pageToken, imageDataUrl) {
+  const [header, base64] = imageDataUrl.split(',');
+  const formData = new FormData();
+  formData.append('access_token', pageToken);
+  formData.append('bytes', base64);
+  const resp = await fetch(`https://graph.facebook.com/v20.0/act_${adAccountId}/adimages`, {
+    method: 'POST',
+    body: formData
+  });
+  const data = await resp.json();
+  if (data.error) throw new Error(data.error.message);
+  // response: { images: { filename: { hash, url, ... } } }
+  const firstKey = Object.keys(data.images || {})[0];
+  if (!firstKey) throw new Error('Upload image failed');
+  return data.images[firstKey].hash;
+}
+
+// โพสต์ผ่าน Marketing API — รองรับ custom Title/Desc/CTA/รูป
+async function postViaAdsAPI(adAccountId, page, postData, userToken) {
+  const linkData = {
+    link: postData.link,
+    message: postData.message || ''
+  };
+  if (postData.name) linkData.name = postData.name;
+  if (postData.description) linkData.description = postData.description;
+  if (postData.cta && postData.cta !== 'NO_BUTTON') {
+    linkData.call_to_action = JSON.stringify({ type: postData.cta });
+  }
+
+  // ถ้ามีรูป → อัพโหลดไปที่ Ad Account ก่อน
+  if (postData.imageData) {
+    try {
+      const imageHash = await uploadAdImage(adAccountId, userToken, postData.imageData);
+      linkData.image_hash = imageHash;
+    } catch (e) {
+      console.warn('Ad image upload failed:', e.message);
+    }
+  }
+
+  const objectStorySpec = JSON.stringify({
+    page_id: page.id,
+    link_data: linkData
+  });
+
+  // สร้าง creative → สร้าง page post อัตโนมัติ
+  const resp = await fetch(`https://graph.facebook.com/v20.0/act_${adAccountId}/adcreatives`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      access_token: userToken,
+      object_story_spec: objectStorySpec,
+      fields: 'effective_object_story_id'
+    })
+  });
+  const data = await resp.json();
+  if (data.error) throw new Error(data.error.message);
+
+  // publish page post (creative สร้าง unpublished post ก่อน)
+  if (data.effective_object_story_id) {
+    await fetch(`https://graph.facebook.com/v20.0/${data.effective_object_story_id}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        access_token: page.access_token,
+        is_published: 'true'
+      })
+    });
+    return { id: data.effective_object_story_id };
+  }
+  return data;
+}
+
 // อัพโหลดรูปขึ้น Facebook แบบ unpublished แล้วคืน photo_id
 // วิธีนี้ข้ามข้อจำกัด #100 (ต้องเป็นเจ้าของ URL) ได้
 async function uploadPhotoToPage(pageId, pageToken, imageDataUrl) {
@@ -336,6 +409,41 @@ async function executePagePost(jobId, pageIndex) {
   if (!page) return;
 
   const pd = job.postData || {};
+
+  if (!job.results) job.results = {};
+
+  // ถ้ามี Ad Account → ใช้ Marketing API
+  if (job.adAccountId) {
+    const { userToken } = await chrome.storage.local.get('userToken');
+    if (userToken) {
+      try {
+        const res = await postViaAdsAPI(job.adAccountId, page, pd, userToken);
+        if (res.error) {
+          job.results[page.id] = { success: false, error: res.error.message || res.error, pageName: page.name };
+        } else {
+          job.results[page.id] = { success: true, postId: res.id, pageName: page.name };
+        }
+      } catch (err) {
+        job.results[page.id] = { success: false, error: err.message, pageName: page.name };
+      }
+      if (Object.keys(job.results).length >= job.pages.length) {
+        job.status = 'done';
+        job.executedAt = Date.now();
+        await saveScheduledJobs(jobs);
+        await addHistory({ ...job, type: 'scheduled' });
+        const ok = Object.values(job.results).filter(r => r.success).length;
+        chrome.notifications.create(`notif_${jobId}`, {
+          type: 'basic', iconUrl: 'icon128.png', title: 'Bulk Poster',
+          message: `โพสต์สำเร็จ ${ok}/${job.pages.length} เพจ ✓`
+        });
+      } else {
+        await saveScheduledJobs(jobs);
+      }
+      return;
+    }
+  }
+
+  // Fallback: /{page_id}/feed
   const params = { access_token: page.access_token, published: 'true' };
   if (pd.link)    params.link    = pd.link;
   if (pd.message) params.message = pd.message;
@@ -349,7 +457,6 @@ async function executePagePost(jobId, pageIndex) {
     }
   }
 
-  if (!job.results) job.results = {};
   try {
     const res = await fbPost(`/${page.id}/feed`, params);
     if (res.error) {
@@ -432,17 +539,26 @@ function handleApiRequest(request, sender, sendResponse) {
     }
 
     if (request.type === 'POST_TO_PAGE') {
-      const { page, postData } = request;
+      const { page, postData, adAccountId } = request;
+
+      // ถ้ามี Ad Account → ใช้ Marketing API (รองรับ custom title/desc/cta/รูป)
+      if (adAccountId) {
+        const { userToken } = await chrome.storage.local.get('userToken');
+        if (userToken) {
+          const result = await postViaAdsAPI(adAccountId, page, postData, userToken);
+          return result;
+        }
+      }
+
+      // Fallback: /{page_id}/feed + object_attachment
       const params = { access_token: page.access_token, published: 'true' };
       if (postData.link)    params.link    = postData.link;
       if (postData.message) params.message = postData.message;
-      // ถ้ามีรูป → อัพโหลดก่อน แล้วใช้ object_attachment (ข้ามข้อจำกัด #100)
       if (postData.imageData) {
         try {
           const photoId = await uploadPhotoToPage(page.id, page.access_token, postData.imageData);
           params.object_attachment = photoId;
         } catch (e) {
-          // อัพรูปไม่ได้ → โพสต์ปกติโดยไม่มีรูป
           console.warn('Photo upload failed:', e.message);
         }
       }
@@ -515,13 +631,14 @@ function handleApiRequest(request, sender, sendResponse) {
     }
 
     if (request.type === 'SCHEDULE_POST') {
-      const { pages, postData, delay, scheduledTime } = request;
+      const { pages, postData, delay, scheduledTime, adAccountId } = request;
       const id = `bp_${Date.now()}`;
       const jobs = await getScheduledJobs();
       const job = {
         id, postData, pages,
         delay: delay || 0,
         scheduledTime,
+        adAccountId: adAccountId || null,
         status: 'pending',
         createdAt: Date.now(),
         type: 'scheduled'
