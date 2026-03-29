@@ -78,20 +78,24 @@ async function fbPost(path, params) {
 }
 
 async function extractTokenFromPage(pageUrl) {
-  const resp = await fetch(pageUrl, { headers: { Accept: 'text/html' } });
+  const resp = await fetch(pageUrl, {
+    headers: { Accept: 'text/html' },
+    signal: AbortSignal.timeout(10000)
+  });
   const html = await resp.text();
+  // รับเฉพาะ EAA tokens เท่านั้น (format จริงของ Facebook)
   const patterns = [
-    /"accessToken"\s*:\s*"([^"]{20,})"/,
-    /"access_token"\s*:\s*"([^"]{20,})"/,
-    /access_token=([^&"'\s]{20,})/,
-    /"token"\s*:\s*"(EAA[^"]+)"/,
-    /EAAG[a-zA-Z0-9]+/,
-    /EAA[a-zA-Z0-9]+/,
+    /"accessToken"\s*:\s*"(EAA[A-Za-z0-9]{50,})"/,
+    /"access_token"\s*:\s*"(EAA[A-Za-z0-9]{50,})"/,
+    /access_token=(EAA[A-Za-z0-9]{50,})/,
+    /(EAA[A-Za-z0-9]{100,})/,
   ];
   for (const p of patterns) {
     const m = html.match(p);
-    if (m && m[1] && m[1].length > 20) return m[1];
-    if (m && m[0] && m[0].length > 20) return m[0];
+    if (m) {
+      const token = m[1] || m[0];
+      if (token && token.startsWith('EAA') && token.length > 50) return token;
+    }
   }
   return null;
 }
@@ -112,17 +116,86 @@ async function extractAndSaveToken() {
 }
 
 async function getPages() {
+  // 1. ลองใช้ cached token ที่ valid (ต้องขึ้นต้น EAA)
   const { userToken, tokenExpiry } = await chrome.storage.local.get(['userToken', 'tokenExpiry']);
-  const token = (userToken && tokenExpiry && Date.now() < tokenExpiry) ? userToken : null;
+  if (userToken && userToken.startsWith('EAA') && tokenExpiry && Date.now() < tokenExpiry) {
+    const data = await fbGet('/me/accounts?fields=id,name,access_token,picture.type(square){url}&limit=200', userToken);
+    if (!data.error) return data;
+    // Token หมดอายุหรือไม่ valid → ลบออก
+    await chrome.storage.local.remove(['userToken', 'tokenExpiry']);
+  }
 
-  const data = await fbGet(
-    '/me/accounts?fields=id,name,access_token,picture.type(square){url}&limit=200',
-    token || undefined
-  );
+  // 2. ลองดึงผ่าน internal Facebook API (ใช้ cookie auth + fb_dtsg)
+  const internalResult = await getPagesViaFbDtsg().catch(() => null);
+  if (internalResult) return internalResult;
 
-  if (!data.error) return data;
+  // 3. ไม่สำเร็จ → แจ้ง user ให้ใส่ token เอง
+  throw new Error('TOKEN_REQUIRED');
+}
 
-  throw new Error(data.error?.message || 'กรุณาเปิด Facebook.com แล้ว Reload Extension ใหม่ หรือใส่ Access Token เอง');
+async function getPagesViaFbDtsg() {
+  // ดึง facebook.com (cookies inject อยู่แล้ว) เพื่อหา fb_dtsg
+  const html = await fetch('https://www.facebook.com/', {
+    signal: AbortSignal.timeout(10000)
+  }).then(r => r.text());
+
+  // หา fb_dtsg token
+  let dtsg = null;
+  const dtsgPatterns = [
+    /"DTSGInitialData","",\{"token":"([^"]+)"/,
+    /"DTSGInitData","",\{"token":"([^"]+)"/,
+    /"fb_dtsg":\{"value":"([^"]+)"/,
+    /\["DTSGInitialData"\],\[\],\{"token":"([^"]+)"/,
+    /"token":"([^"]{8,20})","async_get_token"/,
+  ];
+  for (const p of dtsgPatterns) {
+    const m = html.match(p);
+    if (m && m[1]) { dtsg = m[1]; break; }
+  }
+  if (!dtsg) return null;
+
+  // หา c_user (user ID)
+  const cookies = await chrome.cookies.getAll({ domain: '.facebook.com' });
+  const cUser = cookies.find(c => c.name === 'c_user');
+  if (!cUser) return null;
+
+  // เรียก internal GraphQL API
+  const resp = await fetch('https://www.facebook.com/api/graphql/', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      fb_dtsg: dtsg,
+      fb_api_caller_class: 'RelayModern',
+      server_timestamps: 'true',
+      variables: JSON.stringify({ count: 100, cursor: null, scale: 2 }),
+      doc_id: '4648574585190829',
+    }),
+    signal: AbortSignal.timeout(10000)
+  });
+
+  const raw = await resp.text();
+  // FB internal responses อาจขึ้นต้นด้วย "for (;;);"
+  const cleaned = raw.replace(/^for\s*\(;;\);/, '').trim();
+
+  try {
+    const data = JSON.parse(cleaned);
+    const pages = extractPagesFromGraphQL(data);
+    if (pages && pages.length > 0) return { data: pages };
+  } catch {}
+
+  return null;
+}
+
+function extractPagesFromGraphQL(data) {
+  // ลอง parse หลาย format
+  try {
+    const str = JSON.stringify(data);
+    const matches = [...str.matchAll(/"id":"(\d{10,})","name":"([^"]+)"/g)];
+    if (matches.length > 0) {
+      return matches.map(m => ({ id: m[1], name: m[2], access_token: null }));
+    }
+  } catch {}
+  return null;
 }
 
 async function postToPage(pageId, pageToken, { link, message, scheduledTime }) {
@@ -245,8 +318,11 @@ function handleApiRequest(request, sender, sendResponse) {
       if (!cookies.length) throw new Error('ไม่พบ Cookie Facebook กรุณาล็อกอิน Facebook ก่อน');
       const str = formatCookieString(cookies);
       await setupCookieRules(str);
-      // ดึง token ทันทีหลัง setup (cookies พร้อมแล้ว)
-      extractAndSaveToken().catch(() => {});
+      // รอดึง token (max 12s) — ต้องรอก่อน GET_PAGES จะตามมา
+      await Promise.race([
+        extractAndSaveToken(),
+        new Promise(r => setTimeout(r, 12000))
+      ]).catch(() => {});
       await chrome.storage.local.set({ connected: true, connectedAt: Date.now() });
       return { success: true };
     }
@@ -296,12 +372,18 @@ function handleApiRequest(request, sender, sendResponse) {
     }
 
     if (request.type === 'SET_FB_TOKEN') {
-      if (request.token && request.token.length > 20) {
+      // รับเฉพาะ token ที่ขึ้นต้น EAA เท่านั้น
+      if (request.token && request.token.startsWith('EAA') && request.token.length > 50) {
         await chrome.storage.local.set({
           userToken: request.token,
           tokenExpiry: Date.now() + 3600000
         });
       }
+      return { success: true };
+    }
+
+    if (request.type === 'CLEAR_TOKEN') {
+      await chrome.storage.local.remove(['userToken', 'tokenExpiry']);
       return { success: true };
     }
 

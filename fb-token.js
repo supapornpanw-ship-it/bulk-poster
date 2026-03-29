@@ -4,6 +4,9 @@
 (function () {
   function findToken() {
     // ลอง window globals ต่างๆ ที่ Facebook ใช้
+    // รับเฉพาะ EAA tokens เท่านั้น
+    const isValidToken = (t) => t && typeof t === 'string' && t.startsWith('EAA') && t.length > 50;
+
     const candidates = [
       window.__accessToken,
       window.Env && window.Env.accessToken,
@@ -11,16 +14,16 @@
     ];
 
     for (const t of candidates) {
-      if (t && typeof t === 'string' && t.length > 30) return t;
+      if (isValidToken(t)) return t;
     }
 
-    // สแกน script tags ที่ embed ไว้ใน page
+    // สแกน script tags — รับเฉพาะ EAA tokens (format จริงของ Facebook)
     const scripts = document.querySelectorAll('script:not([src])');
     for (let i = 0; i < scripts.length; i++) {
       const text = scripts[i].textContent;
-      const m = text.match(/"accessToken":"([^"]{50,})"/) ||
-                text.match(/"access_token":"([^"]{50,})"/) ||
-                text.match(/\\"accessToken\\":\\"([^"\\]{50,})\\"/);
+      const m = text.match(/"accessToken":"(EAA[A-Za-z0-9]{50,})"/) ||
+                text.match(/"access_token":"(EAA[A-Za-z0-9]{50,})"/) ||
+                text.match(/access_token=(EAA[A-Za-z0-9]{50,})/);
       if (m && m[1]) return m[1];
     }
 

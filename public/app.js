@@ -93,7 +93,14 @@ async function loadPages() {
     if (!pages.length) { el.innerHTML = `<div class="loading-row">ไม่พบเพจ</div>`; return; }
     renderPages();
   } catch (e) {
-    el.innerHTML = `<div class="loading-row" style="color:var(--danger)">⚠ ${e.message}</div>`;
+    if (e.message === 'TOKEN_REQUIRED') {
+      el.innerHTML = `<div class="loading-row" style="color:#f0a500">
+        ⚠ ไม่พบ Access Token<br/>
+        <small>กรุณาเปิด <a href="https://www.facebook.com" target="_blank" style="color:var(--primary)">facebook.com</a> ในแท็บอื่นค้างไว้ แล้วกด 🔄 โหลดใหม่</small>
+      </div>`;
+    } else {
+      el.innerHTML = `<div class="loading-row" style="color:var(--danger)">⚠ ${e.message}</div>`;
+    }
   }
 }
 
