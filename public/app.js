@@ -392,6 +392,13 @@ async function updateSchedBadge(n) {
   badge.textContent = n; badge.style.display = n ? '' : 'none';
 }
 
+// auto-refresh scheduled list ทุก 30 วินาที
+setInterval(async () => {
+  const tab = document.querySelector('.tab-btn.active');
+  if (tab && tab.dataset.tab === 'sched') loadScheduled();
+  updateSchedBadge();
+}, 30000);
+
 // ─── History ──────────────────────────────────────────────────
 async function loadHistory() {
   const el = document.getElementById('histList');
@@ -406,6 +413,15 @@ async function loadHistory() {
       const card = document.createElement('div');
       card.className = 'job-card';
       const link = job.postData?.link || job.link || '';
+      const results = job.results || {};
+      const okPages = Object.values(results).filter(r => r.success);
+      const failPages = Object.values(results).filter(r => !r.success);
+      const resultHtml = Object.keys(results).length
+        ? `<div class="job-results">
+            ${okPages.map(r => `<div class="res-row res-ok">✅ ${r.pageName}</div>`).join('')}
+            ${failPages.map(r => `<div class="res-row res-fail">❌ ${r.pageName}: ${r.error || 'ไม่ทราบสาเหตุ'}</div>`).join('')}
+           </div>`
+        : `<div class="res-row" style="color:var(--muted);font-size:11px;">ไม่มีผลลัพธ์</div>`;
       card.innerHTML = `
         <div class="job-row1">
           <span class="job-badge ${job.type === 'scheduled' ? 'jb-sched' : 'jb-now'}">${job.type === 'scheduled' ? '⏰' : '🚀'} ${job.type === 'scheduled' ? 'ตั้งเวลา' : 'ทันที'}</span>
@@ -413,9 +429,10 @@ async function loadHistory() {
         </div>
         <div class="job-meta">
           <span>${fmtDate(job.postedAt || job.executedAt)}</span>
-          <span>${job.pages?.length || 0} เพจ</span>
+          <span>${okPages.length}/${job.pages?.length || 0} เพจสำเร็จ</span>
         </div>
-        ${job.message ? `<div style="font-size:11px;color:var(--muted);margin-bottom:6px;">"${trunc(job.message, 60)}"</div>` : ''}
+        ${job.postData?.message ? `<div style="font-size:11px;color:var(--muted);margin-bottom:6px;">"${trunc(job.postData.message, 60)}"</div>` : ''}
+        ${resultHtml}
       `;
       list.appendChild(card);
     });

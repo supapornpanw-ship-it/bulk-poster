@@ -478,3 +478,8 @@ input[type="datetime-local"].inp { color-scheme: dark; }
 ::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+.job-results { margin-top: 8px; display: flex; flex-direction: column; gap: 3px; }
+.res-row { font-size: 11px; padding: 3px 6px; border-radius: 4px; }
+.res-ok { color: #4ade80; background: rgba(74,222,128,.08); }
+.res-fail { color: #f87171; background: rgba(248,113,113,.08); word-break: break-word; }
