@@ -277,14 +277,12 @@ async function uploadAdImage(adAccountId, pageToken, imageDataUrl) {
 
 // โพสต์ผ่าน Marketing API — รองรับ custom Title/Desc/CTA/รูป
 async function postViaAdsAPI(adAccountId, page, postData, userToken) {
-  const linkData = {
-    link: postData.link,
-    message: postData.message || ''
-  };
-  if (postData.name) linkData.name = postData.name;
+  const linkData = { link: postData.link };
+  if (postData.message)     linkData.message     = postData.message;
+  if (postData.name)        linkData.name        = postData.name;
   if (postData.description) linkData.description = postData.description;
   if (postData.cta && postData.cta !== 'NO_BUTTON') {
-    linkData.call_to_action = JSON.stringify({ type: postData.cta });
+    linkData.call_to_action = { type: postData.cta }; // object ไม่ใช่ string
   }
 
   // ถ้ามีรูป → อัพโหลดไปที่ Ad Account ก่อน
