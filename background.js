@@ -115,6 +115,49 @@ async function extractAndSaveToken() {
   return null;
 }
 
+// เปิด tab facebook.com ในเบื้องหลัง รอ fb-token.js ส่ง token มา แล้วปิด tab
+async function extractTokenViaTab() {
+  // ตรวจก่อนว่ามี token อยู่แล้วหรือเปล่า
+  const { userToken, tokenExpiry } = await chrome.storage.local.get(['userToken', 'tokenExpiry']);
+  if (userToken && userToken.startsWith('EAA') && tokenExpiry && Date.now() < tokenExpiry) {
+    return userToken;
+  }
+
+  return new Promise(async (resolve) => {
+    let tab = null;
+    let resolved = false;
+
+    const done = async (token) => {
+      if (resolved) return;
+      resolved = true;
+      if (tab) { try { await chrome.tabs.remove(tab.id); } catch {} }
+      resolve(token);
+    };
+
+    // timeout 15s
+    const timeout = setTimeout(() => done(null), 15000);
+
+    // poll ทุก 500ms ว่า SET_FB_TOKEN มาถึงหรือยัง
+    const poll = setInterval(async () => {
+      const { userToken, tokenExpiry } = await chrome.storage.local.get(['userToken', 'tokenExpiry']);
+      if (userToken && userToken.startsWith('EAA') && tokenExpiry && Date.now() < tokenExpiry) {
+        clearInterval(poll);
+        clearTimeout(timeout);
+        done(userToken);
+      }
+    }, 500);
+
+    // เปิด facebook.com tab ใหม่ (ไม่ active) เพื่อ trigger fb-token.js
+    try {
+      tab = await chrome.tabs.create({ url: 'https://www.facebook.com/', active: false });
+    } catch {
+      clearInterval(poll);
+      clearTimeout(timeout);
+      resolve(null);
+    }
+  });
+}
+
 async function getPages() {
   // 1. ลองใช้ cached token ที่ valid (ต้องขึ้นต้น EAA)
   const { userToken, tokenExpiry } = await chrome.storage.local.get(['userToken', 'tokenExpiry']);
@@ -318,11 +361,8 @@ function handleApiRequest(request, sender, sendResponse) {
       if (!cookies.length) throw new Error('ไม่พบ Cookie Facebook กรุณาล็อกอิน Facebook ก่อน');
       const str = formatCookieString(cookies);
       await setupCookieRules(str);
-      // รอดึง token (max 12s) — ต้องรอก่อน GET_PAGES จะตามมา
-      await Promise.race([
-        extractAndSaveToken(),
-        new Promise(r => setTimeout(r, 12000))
-      ]).catch(() => {});
+      // เปิด facebook.com tab เพื่อดึง token — รอ max 15s
+      await extractTokenViaTab().catch(() => {});
       await chrome.storage.local.set({ connected: true, connectedAt: Date.now() });
       return { success: true };
     }
