@@ -235,6 +235,7 @@ document.getElementById('btnPost').addEventListener('click', async () => {
   const message     = document.getElementById('postMsg').value.trim();
   const name        = document.getElementById('cardTitle').value.trim();
   const description = document.getElementById('cardDesc').value.trim();
+  const caption     = (document.getElementById('displayLink') || {}).value?.trim() || '';
   const cta         = document.getElementById('ctaSel').value;
   const delay       = parseInt(document.getElementById('delaySel').value) || 0;
   const isSchedule  = document.getElementById('schedToggle').checked;
@@ -244,7 +245,7 @@ document.getElementById('btnPost').addEventListener('click', async () => {
   if (!selectedIds.size) return alert('กรุณาเลือกเพจอย่างน้อย 1 เพจ');
 
   const selPages = pages.filter(p => selectedIds.has(p.id));
-  const postData = { link, message, name, description, cta, imageData: currentImageData };
+  const postData = { link, message, name, description, caption, cta, imageData: currentImageData };
 
   if (isSchedule) {
     const dtVal = document.getElementById('schedDT').value;

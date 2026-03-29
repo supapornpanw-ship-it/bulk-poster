@@ -275,62 +275,75 @@ async function uploadAdImage(adAccountId, pageToken, imageDataUrl) {
   return data.images[firstKey].hash;
 }
 
-// โพสต์ผ่าน Marketing API — รองรับ custom Title/Desc/CTA/รูป
+// โพสต์ผ่าน Marketing API — 4 steps เหมือน feedkub
+// [1/4] Upload image → image_hash
+// [2/4] Create creative → creative_id
+// [3/4] Poll post_id (วนรอ 10 ครั้ง)
+// [4/4] Publish post
 async function postViaAdsAPI(adAccountId, page, postData, userToken) {
+  const cleanId = String(adAccountId).replace(/^act_/, '');
+
+  // ── [1/4] Upload image ──
+  let imageHash = null;
+  if (postData.imageData) {
+    imageHash = await uploadAdImage(adAccountId, userToken, postData.imageData);
+  }
+
+  // ── [2/4] Create creative ──
   const linkData = { link: postData.link };
   if (postData.message)     linkData.message     = postData.message;
   if (postData.name)        linkData.name        = postData.name;
   if (postData.description) linkData.description = postData.description;
+  if (postData.caption)     linkData.caption     = postData.caption;
+  if (imageHash)            linkData.image_hash  = imageHash;
   if (postData.cta && postData.cta !== 'NO_BUTTON') {
     linkData.call_to_action = { type: postData.cta, value: { link: postData.link } };
   }
 
-  // ถ้ามีรูป → อัพโหลดไปที่ Ad Account ก่อน
-  if (postData.imageData) {
-    try {
-      const imageHash = await uploadAdImage(adAccountId, userToken, postData.imageData);
-      linkData.image_hash = imageHash;
-    } catch (e) {
-      console.warn('Ad image upload failed:', e.message);
-    }
-  }
-
-  const objectStorySpec = JSON.stringify({
-    page_id: page.id,
-    link_data: linkData
-  });
-
-  // สร้าง creative → สร้าง page post อัตโนมัติ
-  const cleanId = String(adAccountId).replace(/^act_/, '');
-  const resp = await fetch(`https://graph.facebook.com/v20.0/act_${cleanId}/adcreatives`, {
+  const creativeResp = await fetch(`https://graph.facebook.com/v20.0/act_${cleanId}/adcreatives`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
       access_token: userToken,
-      object_story_spec: objectStorySpec,
-      fields: 'effective_object_story_id'
+      object_story_spec: JSON.stringify({ page_id: page.id, link_data: linkData })
     })
   });
-  const data = await resp.json();
-  if (data.error) {
-    const detail = data.error.error_user_msg || data.error.error_user_title || data.error.message;
-    const code = data.error.code ? ` [code ${data.error.code}]` : '';
-    throw new Error(`${detail}${code}`);
+  const creativeData = await creativeResp.json();
+  if (creativeData.error) {
+    const detail = creativeData.error.error_user_msg || creativeData.error.message;
+    throw new Error(detail);
   }
+  const creativeId = creativeData.id;
+  if (!creativeId) throw new Error('ไม่ได้รับ creative_id');
 
-  // publish page post (creative สร้าง unpublished post ก่อน)
-  if (data.effective_object_story_id) {
-    await fetch(`https://graph.facebook.com/v20.0/${data.effective_object_story_id}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        access_token: page.access_token,
-        is_published: 'true'
-      })
-    });
-    return { id: data.effective_object_story_id };
+  // ── [3/4] Poll post_id (วนรอ 10 ครั้ง × 3 วินาที) ──
+  let postId = null;
+  for (let attempt = 0; attempt < 10; attempt++) {
+    await new Promise(r => setTimeout(r, 3000));
+    const pollResp = await fetch(
+      `https://graph.facebook.com/v20.0/${creativeId}?fields=effective_object_story_id&access_token=${encodeURIComponent(userToken)}`
+    );
+    const pollData = await pollResp.json();
+    if (pollData.effective_object_story_id) {
+      postId = pollData.effective_object_story_id;
+      break;
+    }
   }
-  return data;
+  if (!postId) throw new Error('ไม่สามารถดึง post_id ได้ (timeout 30s)');
+
+  // ── [4/4] Publish ──
+  const publishResp = await fetch(`https://graph.facebook.com/v20.0/${postId}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      access_token: page.access_token,
+      is_published: 'true'
+    })
+  });
+  const publishData = await publishResp.json();
+  if (publishData.error) throw new Error('Publish failed: ' + publishData.error.message);
+
+  return { id: postId };
 }
 
 // อัพโหลดรูปขึ้น Facebook แบบ unpublished แล้วคืน photo_id
