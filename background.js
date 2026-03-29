@@ -300,13 +300,13 @@ async function postViaAdsAPI(adAccountId, page, postData, userToken) {
     linkData.call_to_action = { type: postData.cta, value: { link: postData.link } };
   }
 
+  const creativeForm = new FormData();
+  creativeForm.append('access_token', userToken);
+  creativeForm.append('object_story_spec', JSON.stringify({ page_id: page.id, link_data: linkData }));
+
   const creativeResp = await fetch(`https://graph.facebook.com/v20.0/act_${cleanId}/adcreatives`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      access_token: userToken,
-      object_story_spec: JSON.stringify({ page_id: page.id, link_data: linkData })
-    })
+    body: creativeForm
   });
   const creativeData = await creativeResp.json();
   if (creativeData.error) {
