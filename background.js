@@ -272,7 +272,7 @@ async function uploadAdImage(adAccountId, pageToken, imageDataUrl) {
   // response: { images: { filename: { hash, url, ... } } }
   const firstKey = Object.keys(data.images || {})[0];
   if (!firstKey) throw new Error('Upload image failed');
-  return data.images[firstKey].hash;
+  return { hash: data.images[firstKey].hash, url: data.images[firstKey].url };
 }
 
 // โพสต์ผ่าน Marketing API — 4 steps เหมือน feedkub
@@ -280,13 +280,16 @@ async function uploadAdImage(adAccountId, pageToken, imageDataUrl) {
 // [2/4] Create creative → creative_id
 // [3/4] Poll post_id (วนรอ 10 ครั้ง)
 // [4/4] Publish post
-async function postViaAdsAPI(adAccountId, page, postData, userToken) {
+async function postViaAdsAPI(adAccountId, page, postData, userToken, scheduledTime) {
   const cleanId = String(adAccountId).replace(/^act_/, '');
 
   // ── [1/4] Upload image ──
   let imageHash = null;
+  let imageUrl = null;
   if (postData.imageData) {
-    imageHash = await uploadAdImage(adAccountId, userToken, postData.imageData);
+    const imgResult = await uploadAdImage(adAccountId, userToken, postData.imageData);
+    imageHash = imgResult.hash;
+    imageUrl = imgResult.url;
   }
 
   // ── [2/4] Create creative ──
@@ -294,7 +297,7 @@ async function postViaAdsAPI(adAccountId, page, postData, userToken) {
   if (postData.message)     linkData.message     = postData.message;
   if (postData.name)        linkData.name        = postData.name;
   if (postData.description) linkData.description = postData.description;
-  if (postData.caption)     linkData.caption     = postData.caption;
+  if (postData.caption && /^(https?:\/\/|www\.)\S+/i.test(postData.caption)) linkData.caption = postData.caption;
   if (imageHash)            linkData.image_hash  = imageHash;
   if (postData.cta && postData.cta !== 'NO_BUTTON') {
     linkData.call_to_action = { type: postData.cta, value: { link: postData.link } };
@@ -331,19 +334,72 @@ async function postViaAdsAPI(adAccountId, page, postData, userToken) {
   }
   if (!postId) throw new Error('ไม่สามารถดึง post_id ได้ (timeout 30s)');
 
-  // ── [4/4] Publish ──
+  // ── [4/4] Publish or Schedule ──
+  if (scheduledTime) {
+    // ลอง schedule แบบ Facebook native ก่อน
+    const schedResp = await fetch(`https://graph.facebook.com/v20.0/${postId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        access_token: page.access_token,
+        scheduled_publish_time: String(Math.floor(scheduledTime / 1000))
+      })
+    });
+    const schedData = await schedResp.json();
+    if (schedData.error) {
+      // ถ้า schedule ไม่ได้ → return postId กลับไปให้ alarm publish แทน
+      return { id: postId, pageToken: page.access_token, needsAlarm: true };
+    }
+    return { id: postId, pageToken: page.access_token, scheduled: true };
+  }
+
+  // Publish ทันที
   const publishResp = await fetch(`https://graph.facebook.com/v20.0/${postId}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      access_token: page.access_token,
-      is_published: 'true'
-    })
+    body: new URLSearchParams({ access_token: page.access_token, is_published: 'true' })
   });
   const publishData = await publishResp.json();
   if (publishData.error) throw new Error('Publish failed: ' + publishData.error.message);
 
-  return { id: postId };
+  return { id: postId, pageToken: page.access_token };
+}
+
+// ── ตั้งเวลาโพสผ่าน Feed API + Redirect URL (Facebook native schedule) ──
+// สร้าง redirect URL ที่มี OG tags → Facebook scrape แล้วสร้าง Card Link + ตั้งเวลาได้
+async function scheduleViaFeedAPI(adAccountId, page, postData, userToken, scheduledTime) {
+  // 1. Upload image → ได้ URL จาก Facebook CDN
+  let imageUrl = null;
+  if (postData.imageData) {
+    const imgResult = await uploadAdImage(adAccountId, userToken, postData.imageData);
+    imageUrl = imgResult.url;
+  }
+
+  // 2. สร้าง redirect URL พร้อม OG tags
+  const params = new URLSearchParams();
+  params.set('url', postData.link);
+  if (postData.name) params.set('title', postData.name);
+  if (postData.description) params.set('desc', postData.description);
+  if (imageUrl) params.set('img', imageUrl);
+  if (postData.caption) params.set('caption', postData.caption);
+  const redirectUrl = `https://bulk-poster.vercel.app/api/r?${params.toString()}`;
+
+  // 3. POST /{page_id}/feed พร้อม scheduled_publish_time
+  const feedParams = new URLSearchParams();
+  feedParams.set('access_token', page.access_token);
+  feedParams.set('link', redirectUrl);
+  if (postData.message) feedParams.set('message', postData.message);
+  feedParams.set('published', 'false');
+  feedParams.set('scheduled_publish_time', String(Math.floor(scheduledTime / 1000)));
+
+  const resp = await fetch(`https://graph.facebook.com/v20.0/${page.id}/feed`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: feedParams
+  });
+  const data = await resp.json();
+  if (data.error) throw new Error(data.error.message);
+  return { id: data.id, scheduled: true };
 }
 
 // อัพโหลดรูปขึ้น Facebook แบบ unpublished แล้วคืน photo_id
@@ -416,7 +472,138 @@ async function addHistory(entry) {
 
 // ─── Execute Post Job ─────────────────────────────────────────────────────
 
-// โพสต์เพจเดียวเมื่อ alarm ยิง (ทนต่อ service worker ถูก kill)
+// Phase 1: สร้างโพส (step 1-3) แล้วเก็บ postId — ยังไม่ publish
+async function preparePagePost(jobId, pageIndex) {
+  const jobs = await getScheduledJobs();
+  const job = jobs.find(j => j.id === jobId);
+  if (!job || job.status === 'cancelled') return;
+
+  const page = job.pages[pageIndex];
+  if (!page) return;
+
+  const pd = job.postData || {};
+
+  if (job.adAccountId) {
+    const { userToken } = await chrome.storage.local.get('userToken');
+    if (userToken) {
+      try {
+        // scheduledTime ทำให้ step 4 ข้าม publish → ได้ postId กลับมา
+        const res = await postViaAdsAPI(job.adAccountId, page, pd, userToken, job.scheduledTime);
+        // เก็บ postId ไว้ใน job สำหรับ publish ทีหลัง
+        if (!job.preparedPosts) job.preparedPosts = {};
+        job.preparedPosts[pageIndex] = { postId: res.id, pageId: page.id, pageToken: page.access_token };
+        await updatePageStatus(jobId, pageIndex, 'prepared');
+      } catch (err) {
+        if (!job.results) job.results = {};
+        job.results[page.id] = { success: false, error: err.message, pageName: page.name };
+        await updatePageStatus(jobId, pageIndex, 'error', err.message);
+      }
+      await saveScheduledJobs(jobs);
+      return;
+    }
+  }
+
+  // Fallback: /{page_id}/feed — ตั้งเวลาผ่าน Facebook ได้เลย
+  const params = { access_token: page.access_token };
+  if (job.scheduledTime) {
+    params.scheduled_publish_time = String(Math.floor(job.scheduledTime / 1000));
+    params.published = 'false';
+  }
+  if (pd.link)    params.link    = pd.link;
+  if (pd.message) params.message = pd.message;
+  try {
+    const res = await fbPost(`/${page.id}/feed`, params);
+    if (res.error) throw new Error(res.error.message);
+    if (!job.results) job.results = {};
+    job.results[page.id] = { success: true, postId: res.id, pageName: page.name };
+    await updatePageStatus(jobId, pageIndex, 'done');
+  } catch (err) {
+    if (!job.results) job.results = {};
+    job.results[page.id] = { success: false, error: err.message, pageName: page.name };
+    await updatePageStatus(jobId, pageIndex, 'error', err.message);
+  }
+  await saveScheduledJobs(jobs);
+}
+
+// Phase 2: Publish โพสที่เตรียมไว้ (ตรงเวลาที่ตั้ง)
+async function publishPreparedPost(jobId, pageIndex) {
+  const jobs = await getScheduledJobs();
+  const job = jobs.find(j => j.id === jobId);
+  if (!job || job.status === 'cancelled') return;
+
+  const page = job.pages[pageIndex];
+  if (!page) return;
+
+  const prepared = (job.preparedPosts || {})[pageIndex];
+  if (!prepared) return;
+
+  if (!job.results) job.results = {};
+
+  try {
+    const resp = await fetch(`https://graph.facebook.com/v20.0/${prepared.postId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ access_token: prepared.pageToken, is_published: 'true' })
+    });
+    const data = await resp.json();
+    if (data.error) throw new Error(data.error.message);
+    job.results[page.id] = { success: true, postId: prepared.postId, pageName: page.name };
+    await updatePageStatus(jobId, pageIndex, 'done');
+  } catch (err) {
+    job.results[page.id] = { success: false, error: err.message, pageName: page.name };
+    await updatePageStatus(jobId, pageIndex, 'error', err.message);
+  }
+
+  await finalizeIfAllDone(jobs, job, jobId);
+}
+
+// ── ตั้งเวลาโพสทุกเพจ (ทำงาน background) ──
+async function prepareScheduledJob(jobId, pages, postData, delay, scheduledTime, adAccountId) {
+  const { userToken } = await chrome.storage.local.get('userToken');
+  const jobs = await getScheduledJobs();
+  const job = jobs.find(j => j.id === jobId);
+  if (!job) return;
+
+  const imageData = postData.imageData;
+  delete job.postData.imageData; // ลดขนาด storage
+
+  if (!job.results) job.results = {};
+  let okCount = 0;
+
+  for (let i = 0; i < pages.length; i++) {
+    try {
+      if (adAccountId && userToken) {
+        const pd = { ...postData, imageData };
+        // ใช้ Feed API + redirect URL → Facebook native schedule
+        const res = await scheduleViaFeedAPI(adAccountId, pages[i], pd, userToken, scheduledTime);
+        job.results[pages[i].id] = { success: true, postId: res.id, pageName: pages[i].name };
+        job.pageStatuses[i] = { status: 'scheduled', fireAt: scheduledTime, error: null };
+        okCount++;
+      }
+    } catch (err) {
+      job.results[pages[i].id] = { success: false, error: err.message, pageName: pages[i].name };
+      job.pageStatuses[i] = { status: 'error', fireAt: scheduledTime, error: err.message };
+    }
+    await saveScheduledJobs(jobs);
+
+    // ดีเลย์ระหว่างเพจ (max 30 วิ)
+    if (i < pages.length - 1 && delay > 0) {
+      await new Promise(r => setTimeout(r, Math.min(delay, 30000)));
+    }
+  }
+
+  job.status = 'done';
+  job.executedAt = Date.now();
+  await saveScheduledJobs(jobs);
+  await addHistory({ ...job, type: 'scheduled' });
+
+  chrome.notifications.create(`done_${jobId}`, {
+    type: 'basic', iconUrl: 'icon128.png', title: 'Bulk Poster',
+    message: `✅ ตั้งเวลาสำเร็จ ${okCount}/${pages.length} เพจ${needsAlarmPages.length ? ` (${needsAlarmPages.length} รอ alarm)` : ''}`
+  });
+}
+
+// โพสต์ทันที (ไม่ schedule)
 async function executePagePost(jobId, pageIndex) {
   const jobs = await getScheduledJobs();
   const job = jobs.find(j => j.id === jobId);
@@ -429,7 +616,6 @@ async function executePagePost(jobId, pageIndex) {
 
   if (!job.results) job.results = {};
 
-  // ถ้ามี Ad Account → ใช้ Marketing API
   if (job.adAccountId) {
     const { userToken } = await chrome.storage.local.get('userToken');
     if (userToken) {
@@ -460,7 +646,7 @@ async function executePagePost(jobId, pageIndex) {
       const photoId = await uploadPhotoToPage(page.id, page.access_token, pd.imageData);
       params.object_attachment = photoId;
     } catch (e) {
-      console.warn('Scheduled photo upload failed:', e.message);
+      console.warn('Photo upload failed:', e.message);
     }
   }
 
@@ -502,23 +688,71 @@ async function finalizeIfAllDone(jobs, job, jobId) {
 
 chrome.alarms.onAlarm.addListener(alarm => {
   if (!alarm.name.startsWith('bp_')) return;
+
+  // ── Alarm: ถึงเวลา publish โพสที่เตรียมไว้ ──
+  const publishMatch = alarm.name.match(/^(bp_\d+)_publish$/);
+  if (publishMatch) {
+    const jobId = publishMatch[1];
+    (async () => {
+      const jobs = await getScheduledJobs();
+      const job = jobs.find(j => j.id === jobId);
+      if (!job || job.status === 'cancelled') return;
+
+      chrome.notifications.create(`pub_${jobId}`, {
+        type: 'basic', iconUrl: 'icon128.png', title: 'Bulk Poster',
+        message: `⏰ ถึงเวลาแล้ว! กำลัง publish ${job.pages.length} เพจ...`
+      });
+
+      if (!job.results) job.results = {};
+      const prepared = job.preparedPosts || {};
+
+      for (let i = 0; i < job.pages.length; i++) {
+        const p = prepared[i];
+        if (!p || !p.postId) continue; // เพจนี้เตรียมไม่สำเร็จ ข้ามไป
+
+        try {
+          const resp = await fetch(`https://graph.facebook.com/v20.0/${p.postId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({ access_token: p.pageToken, is_published: 'true' })
+          });
+          const data = await resp.json();
+          if (data.error) throw new Error(data.error.message);
+          job.results[job.pages[i].id] = { success: true, postId: p.postId, pageName: job.pages[i].name };
+          job.pageStatuses[i] = { status: 'done', fireAt: job.scheduledTime, error: null };
+        } catch (err) {
+          job.results[job.pages[i].id] = { success: false, error: err.message, pageName: job.pages[i].name };
+          job.pageStatuses[i] = { status: 'error', fireAt: job.scheduledTime, error: err.message };
+        }
+      }
+
+      job.status = 'done';
+      job.executedAt = Date.now();
+      await saveScheduledJobs(jobs);
+      await addHistory({ ...job, type: 'scheduled' });
+      const ok = Object.values(job.results).filter(r => r.success).length;
+      chrome.notifications.create(`done_${jobId}`, {
+        type: 'basic', iconUrl: 'icon128.png', title: 'Bulk Poster',
+        message: `✅ Publish สำเร็จ ${ok}/${job.pages.length} เพจ`
+      });
+    })();
+    return;
+  }
+
+  // ── Alarm เดิม: POST_TO_PAGE immediate (ไม่ใช้แล้วสำหรับ schedule ใหม่) ──
   const m = alarm.name.match(/^(bp_\d+)_page_(\d+)$/);
   if (m) {
     const jobId = m[1];
     const pageIdx = parseInt(m[2]);
-
-    // อัพเดท status เป็น "posting"
-    updatePageStatus(jobId, pageIdx, 'posting').then(() => {
-      chrome.notifications.create(`firing_${alarm.name}`, {
-        type: 'basic', iconUrl: 'icon128.png', title: 'Bulk Poster',
-        message: `⏰ กำลังโพสต์เพจที่ ${pageIdx + 1}...`
-      });
-      executePagePost(jobId, pageIdx).catch(err => {
+    updatePageStatus(jobId, pageIdx, 'posting').then(async () => {
+      try {
+        await executePagePost(jobId, pageIdx);
+      } catch (err) {
         chrome.notifications.create(`err_${alarm.name}`, {
           type: 'basic', iconUrl: 'icon128.png', title: 'Bulk Poster — Error',
           message: `❌ ${err.message}`
         });
-      });
+      }
     });
   }
 });
@@ -677,29 +911,26 @@ function handleApiRequest(request, sender, sendResponse) {
       const { pages, postData, delay, scheduledTime, adAccountId } = request;
       const id = `bp_${Date.now()}`;
       const jobs = await getScheduledJobs();
-      // สร้าง pageStatuses เริ่มต้น — ทุกเพจเป็น "waiting"
       const pageStatuses = {};
       for (let i = 0; i < pages.length; i++) {
-        const fireAt = scheduledTime + i * (delay || 0);
-        pageStatuses[i] = { status: 'waiting', fireAt, error: null };
+        pageStatuses[i] = { status: 'preparing', fireAt: scheduledTime, error: null };
       }
       const job = {
         id, postData, pages,
         delay: delay || 0,
         scheduledTime,
         adAccountId: adAccountId || null,
-        status: 'pending',
+        status: 'preparing',
         createdAt: Date.now(),
         type: 'scheduled',
-        pageStatuses
+        pageStatuses,
+        preparedPosts: {}
       };
       jobs.push(job);
       await saveScheduledJobs(jobs);
-      // สร้าง alarm แยกต่างหากต่อเพจ — service worker ไม่ตายระหว่าง delay
-      for (let i = 0; i < pages.length; i++) {
-        const fireAt = scheduledTime + i * (delay || 0);
-        chrome.alarms.create(`${id}_page_${i}`, { when: fireAt });
-      }
+
+      // return ทันที → เตรียมโพสใน background
+      prepareScheduledJob(id, pages, postData, delay, scheduledTime, adAccountId);
       return { success: true, id, jobId: id };
     }
 
