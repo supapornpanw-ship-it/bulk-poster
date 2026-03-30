@@ -24,19 +24,21 @@ export default function handler(req, res) {
   <meta charset="UTF-8" />
   <meta property="og:title" content="${safeTitle}" />
   <meta property="og:description" content="${safeDesc}" />
-  ${safeImg ? `<meta property="og:image" content="${safeImg}" />` : ''}
+  ${safeImg ? `<meta property="og:image" content="${safeImg}" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />` : ''}
   ${safeCaption ? `<meta property="og:site_name" content="${safeCaption}" />` : ''}
   <meta property="og:type" content="website" />
-  <meta http-equiv="refresh" content="0;url=${escapeHtml(safeUrl)}" />
   <title>${safeTitle}</title>
 </head>
 <body>
-  <p>Redirecting...</p>
-  <script>window.location.href = decodeURIComponent("${encodeURIComponent(safeUrl)}");</script>
+  <p>กำลังไปยังหน้าสินค้า...</p>
+  <script>window.location.replace(${JSON.stringify(safeUrl)});</script>
 </body>
 </html>`;
 
+  // ไม่ cache เพื่อให้ Facebook scrape ใหม่ได้
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
-  res.setHeader('Cache-Control', 'public, max-age=31536000');
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
   res.status(200).send(html);
 }
