@@ -334,33 +334,16 @@ async function postViaAdsAPI(adAccountId, page, postData, userToken, scheduledTi
   }
   if (!postId) throw new Error('ไม่สามารถดึง post_id ได้ (timeout 30s)');
 
-  // ── [4/4] Publish or Schedule ──
-  if (scheduledTime) {
-    // ลอง schedule แบบ Facebook native ก่อน
-    const schedResp = await fetch(`https://graph.facebook.com/v20.0/${postId}`, {
+  // ── [4/4] Publish ── (ถ้า schedule → ข้าม ให้ alarm publish ทีหลัง)
+  if (!scheduledTime) {
+    const publishResp = await fetch(`https://graph.facebook.com/v20.0/${postId}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        access_token: page.access_token,
-        scheduled_publish_time: String(Math.floor(scheduledTime / 1000))
-      })
+      body: new URLSearchParams({ access_token: page.access_token, is_published: 'true' })
     });
-    const schedData = await schedResp.json();
-    if (schedData.error) {
-      // ถ้า schedule ไม่ได้ → return postId กลับไปให้ alarm publish แทน
-      return { id: postId, pageToken: page.access_token, needsAlarm: true };
-    }
-    return { id: postId, pageToken: page.access_token, scheduled: true };
+    const publishData = await publishResp.json();
+    if (publishData.error) throw new Error('Publish failed: ' + publishData.error.message);
   }
-
-  // Publish ทันที
-  const publishResp = await fetch(`https://graph.facebook.com/v20.0/${postId}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ access_token: page.access_token, is_published: 'true' })
-  });
-  const publishData = await publishResp.json();
-  if (publishData.error) throw new Error('Publish failed: ' + publishData.error.message);
 
   return { id: postId, pageToken: page.access_token };
 }
@@ -574,14 +557,13 @@ async function prepareScheduledJob(jobId, pages, postData, delay, scheduledTime,
     try {
       if (adAccountId && userToken) {
         const pd = { ...postData, imageData };
-        // ใช้ Feed API + redirect URL → Facebook native schedule
-        const res = await scheduleViaFeedAPI(adAccountId, pages[i], pd, userToken, scheduledTime);
-        job.results[pages[i].id] = { success: true, postId: res.id, pageName: pages[i].name };
-        job.pageStatuses[i] = { status: 'scheduled', fireAt: scheduledTime, error: null };
+        // สร้าง Card Link ผ่าน adcreatives (step 1-3) ยังไม่ publish
+        const res = await postViaAdsAPI(adAccountId, pages[i], pd, userToken, scheduledTime);
+        job.preparedPosts[i] = { postId: res.id, pageToken: res.pageToken };
+        job.pageStatuses[i] = { status: 'waiting', fireAt: scheduledTime, error: null };
         okCount++;
       }
     } catch (err) {
-      job.results[pages[i].id] = { success: false, error: err.message, pageName: pages[i].name };
       job.pageStatuses[i] = { status: 'error', fireAt: scheduledTime, error: err.message };
     }
     await saveScheduledJobs(jobs);
@@ -592,14 +574,48 @@ async function prepareScheduledJob(jobId, pages, postData, delay, scheduledTime,
     }
   }
 
-  job.status = 'done';
-  job.executedAt = Date.now();
+  // ส่งข้อมูลไป server (QStash จะ publish ตรงเวลา — ปิด Chrome ได้)
+  let serverOk = false;
+  if (okCount > 0) {
+    try {
+      const serverPages = pages.map((p, i) => ({
+        id: p.id,
+        name: p.name,
+        postId: job.preparedPosts[i]?.postId,
+        pageToken: job.preparedPosts[i]?.pageToken,
+      })).filter(p => p.postId);
+
+      const resp = await fetch('https://bulk-poster.vercel.app/api/schedule', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-bp-secret': 'bp_secret_2024',
+        },
+        body: JSON.stringify({
+          jobId,
+          pages: serverPages,
+          scheduledTime,
+          delay: delay || 0,
+          postData: { link: postData.link, message: postData.message, name: postData.name, description: postData.description, caption: postData.caption, cta: postData.cta },
+        }),
+      });
+      const srvData = await resp.json();
+      if (srvData.success) serverOk = true;
+    } catch (e) {
+      console.warn('Server schedule failed, falling back to alarm:', e.message);
+    }
+  }
+
+  // alarm ยังเก็บไว้เป็น fallback ถ้า server ไม่ได้
+  job.status = okCount > 0 ? 'pending' : 'done';
+  job.serverScheduled = serverOk;
   await saveScheduledJobs(jobs);
-  await addHistory({ ...job, type: 'scheduled' });
 
   chrome.notifications.create(`done_${jobId}`, {
     type: 'basic', iconUrl: 'icon128.png', title: 'Bulk Poster',
-    message: `✅ ตั้งเวลาสำเร็จ ${okCount}/${pages.length} เพจ${needsAlarmPages.length ? ` (${needsAlarmPages.length} รอ alarm)` : ''}`
+    message: serverOk
+      ? `✅ เตรียม Card Link สำเร็จ ${okCount}/${pages.length} เพจ — ปิด Chrome ได้เลย!`
+      : `✅ เตรียม Card Link สำเร็จ ${okCount}/${pages.length} เพจ — เปิด Chrome ค้างไว้`
   });
 }
 
@@ -689,52 +705,73 @@ async function finalizeIfAllDone(jobs, job, jobId) {
 chrome.alarms.onAlarm.addListener(alarm => {
   if (!alarm.name.startsWith('bp_')) return;
 
-  // ── Alarm: ถึงเวลา publish โพสที่เตรียมไว้ ──
-  const publishMatch = alarm.name.match(/^(bp_\d+)_publish$/);
-  if (publishMatch) {
-    const jobId = publishMatch[1];
+  // ── Alarm: publish เพจเดียว ──
+  const pubMatch = alarm.name.match(/^(bp_\d+)_pub_(\d+)$/);
+  if (pubMatch) {
+    const jobId = pubMatch[1];
+    const idx = parseInt(pubMatch[2]);
     (async () => {
-      const jobs = await getScheduledJobs();
-      const job = jobs.find(j => j.id === jobId);
-      if (!job || job.status === 'cancelled') return;
+      try {
+        const jobs = await getScheduledJobs();
+        const job = jobs.find(j => j.id === jobId);
+        if (!job || job.status === 'cancelled') return;
 
-      chrome.notifications.create(`pub_${jobId}`, {
-        type: 'basic', iconUrl: 'icon128.png', title: 'Bulk Poster',
-        message: `⏰ ถึงเวลาแล้ว! กำลัง publish ${job.pages.length} เพจ...`
-      });
-
-      if (!job.results) job.results = {};
-      const prepared = job.preparedPosts || {};
-
-      for (let i = 0; i < job.pages.length; i++) {
-        const p = prepared[i];
-        if (!p || !p.postId) continue; // เพจนี้เตรียมไม่สำเร็จ ข้ามไป
-
-        try {
-          const resp = await fetch(`https://graph.facebook.com/v20.0/${p.postId}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: new URLSearchParams({ access_token: p.pageToken, is_published: 'true' })
-          });
-          const data = await resp.json();
-          if (data.error) throw new Error(data.error.message);
-          job.results[job.pages[i].id] = { success: true, postId: p.postId, pageName: job.pages[i].name };
-          job.pageStatuses[i] = { status: 'done', fireAt: job.scheduledTime, error: null };
-        } catch (err) {
-          job.results[job.pages[i].id] = { success: false, error: err.message, pageName: job.pages[i].name };
-          job.pageStatuses[i] = { status: 'error', fireAt: job.scheduledTime, error: err.message };
+        // ถ้า prepare ยังไม่เสร็จ → retry ใน 10 วิ
+        const p = (job.preparedPosts || {})[idx];
+        if (!p || !p.postId) {
+          if (job.status === 'preparing') {
+            chrome.alarms.create(alarm.name, { when: Date.now() + 10000 });
+          }
+          return;
         }
-      }
 
-      job.status = 'done';
-      job.executedAt = Date.now();
-      await saveScheduledJobs(jobs);
-      await addHistory({ ...job, type: 'scheduled' });
-      const ok = Object.values(job.results).filter(r => r.success).length;
-      chrome.notifications.create(`done_${jobId}`, {
-        type: 'basic', iconUrl: 'icon128.png', title: 'Bulk Poster',
-        message: `✅ Publish สำเร็จ ${ok}/${job.pages.length} เพจ`
-      });
+        chrome.notifications.create(`pub_${jobId}_${idx}`, {
+          type: 'basic', iconUrl: 'icon128.png', title: 'Bulk Poster',
+          message: `📤 Publish เพจ ${idx + 1}: ${job.pages[idx]?.name || ''}`
+        });
+
+        if (!job.results) job.results = {};
+        const resp = await fetch(`https://graph.facebook.com/v20.0/${p.postId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({ access_token: p.pageToken, is_published: 'true' })
+        });
+        const data = await resp.json();
+        if (data.error) throw new Error(data.error.message);
+
+        job.results[job.pages[idx].id] = { success: true, postId: p.postId, pageName: job.pages[idx].name };
+        job.pageStatuses[idx] = { status: 'done', fireAt: job.scheduledTime, error: null };
+
+        // เช็คครบทุกเพจหรือยัง
+        const total = job.pages.length;
+        const doneCount = Object.keys(job.results).length;
+        if (doneCount >= total) {
+          job.status = 'done';
+          job.executedAt = Date.now();
+          await saveScheduledJobs(jobs);
+          await addHistory({ ...job, type: 'scheduled' });
+          const ok = Object.values(job.results).filter(r => r.success).length;
+          chrome.notifications.create(`done_${jobId}`, {
+            type: 'basic', iconUrl: 'icon128.png', title: 'Bulk Poster',
+            message: `✅ Publish สำเร็จ ${ok}/${total} เพจ`
+          });
+        } else {
+          await saveScheduledJobs(jobs);
+        }
+      } catch (err) {
+        const jobs = await getScheduledJobs();
+        const job = jobs.find(j => j.id === jobId);
+        if (job) {
+          if (!job.results) job.results = {};
+          job.results[job.pages[idx]?.id] = { success: false, error: err.message, pageName: job.pages[idx]?.name };
+          job.pageStatuses[idx] = { status: 'error', fireAt: job.scheduledTime, error: err.message };
+          await saveScheduledJobs(jobs);
+        }
+        chrome.notifications.create(`err_${jobId}_${idx}`, {
+          type: 'basic', iconUrl: 'icon128.png', title: 'Bulk Poster — Error',
+          message: `❌ ${job?.pages[idx]?.name}: ${err.message}`
+        });
+      }
     })();
     return;
   }
@@ -929,7 +966,12 @@ function handleApiRequest(request, sender, sendResponse) {
       jobs.push(job);
       await saveScheduledJobs(jobs);
 
-      // return ทันที → เตรียมโพสใน background
+      // สร้าง alarm แยกต่อเพจ — 1 alarm = 1 เพจ = 1 API call
+      for (let i = 0; i < pages.length; i++) {
+        const fireAt = scheduledTime + i * (delay || 0);
+        chrome.alarms.create(`${id}_pub_${i}`, { when: fireAt });
+      }
+      // เตรียมโพสใน background
       prepareScheduledJob(id, pages, postData, delay, scheduledTime, adAccountId);
       return { success: true, id, jobId: id };
     }
@@ -951,7 +993,7 @@ function handleApiRequest(request, sender, sendResponse) {
 
     if (request.type === 'GET_SCHEDULED') {
       const jobs = await getScheduledJobs();
-      return jobs.filter(j => j.status === 'pending' || j.status === 'posting');
+      return jobs.filter(j => j.status === 'pending' || j.status === 'posting' || j.status === 'preparing');
     }
 
     if (request.type === 'CANCEL_SCHEDULED') {

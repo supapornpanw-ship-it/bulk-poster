@@ -479,10 +479,27 @@ function renderScheduled(jobs) {
       pagesHtml += `<span class="page-status-chip">${icon} ${p.name}</span>`;
     });
 
+    const pd = job.postData || {};
+    const thumbHtml = pd.imageData ? `<img src="${pd.imageData}" class="job-thumb" />` : '';
+    const msgPreview = pd.message ? `<div class="job-msg">"${trunc(pd.message, 80)}"</div>` : '';
+    const detailParts = [];
+    if (pd.name) detailParts.push(`<b>Card Title:</b> ${escHtml(pd.name)}`);
+    if (pd.description) detailParts.push(`<b>Description:</b> ${escHtml(pd.description)}`);
+    if (pd.caption) detailParts.push(`<b>Display Link:</b> ${escHtml(pd.caption)}`);
+    if (pd.cta && pd.cta !== 'NO_BUTTON') detailParts.push(`<b>CTA:</b> ${escHtml(pd.cta)}`);
+    const detailHtml = detailParts.length ? `<div class="job-details">${detailParts.join(' · ')}</div>` : '';
+
     card.innerHTML = `
       <div class="job-row1">
         <span class="job-badge ${job.status === 'posting' ? 'jb-posting' : 'jb-sched'}">${job.status === 'posting' ? '🔄 กำลังโพส' : '⏰ ตั้งเวลา'}</span>
-        <a href="${job.postData?.link || job.link || ''}" target="_blank" class="job-link">${trunc(job.postData?.link || job.link || '', 50)}</a>
+        <a href="${pd.link || job.link || ''}" target="_blank" class="job-link">${trunc(pd.link || job.link || '', 50)}</a>
+      </div>
+      <div class="job-preview">
+        ${thumbHtml}
+        <div class="job-preview-text">
+          ${msgPreview}
+          ${detailHtml}
+        </div>
       </div>
       <div class="job-meta">
         <span>🕐 ${fmtDate(job.scheduledTime)}</span>
