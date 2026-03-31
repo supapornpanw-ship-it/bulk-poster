@@ -34,6 +34,7 @@ export default async function handler(req, res) {
       results: {},
     };
     await redis.set(`job:${jobId}`, JSON.stringify(job), { ex: 604800 });
+    await redis.sadd('jobs:all', jobId);
 
     // ตั้ง QStash schedule แยกต่อเพจ
     const baseUrl = `https://${req.headers.host}/api/publish`;
