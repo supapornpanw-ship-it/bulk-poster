@@ -2,6 +2,9 @@
 import { Redis } from '@upstash/redis';
 import { Receiver } from '@upstash/qstash';
 
+// ปิด Vercel body parser เพื่อให้ verify QStash signature ได้ถูกต้อง
+export const config = { api: { bodyParser: false } };
+
 const redis = new Redis({
   url: process.env.UPSTASH_REDIS_REST_URL,
   token: process.env.UPSTASH_REDIS_REST_TOKEN,
@@ -12,21 +15,34 @@ const receiver = new Receiver({
   nextSigningKey: process.env.QSTASH_NEXT_SIGNING_KEY,
 });
 
+// อ่าน raw body จาก request
+function getRawBody(req) {
+  return new Promise((resolve, reject) => {
+    let data = '';
+    req.on('data', chunk => data += chunk);
+    req.on('end', () => resolve(data));
+    req.on('error', reject);
+  });
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  // ตรวจ QStash signature
+  const rawBody = await getRawBody(req);
+  let body;
+
+  // ตรวจ QStash signature ด้วย raw body
   try {
     const signature = req.headers['upstash-signature'];
-    const body = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
-    await receiver.verify({ signature, body, url: `https://${req.headers.host}/api/publish` });
+    await receiver.verify({ signature, body: rawBody, url: `https://${req.headers.host}/api/publish` });
+    body = JSON.parse(rawBody);
   } catch (err) {
-    console.error('QStash signature verification failed:', err);
+    console.error('QStash verification failed:', err);
     return res.status(401).json({ error: 'Invalid signature' });
   }
 
   try {
-    const { jobId, pageIndex } = req.body;
+    const { jobId, pageIndex } = body;
     if (!jobId || pageIndex === undefined) {
       return res.status(400).json({ error: 'Missing jobId or pageIndex' });
     }
