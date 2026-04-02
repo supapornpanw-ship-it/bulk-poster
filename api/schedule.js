@@ -12,9 +12,9 @@ const qstash = new Client({ token: process.env.QSTASH_TOKEN });
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  // ตรวจ secret
+  // ตรวจ secret (hardcoded — personal project)
   const auth = req.headers['x-bp-secret'];
-  if (auth !== process.env.BP_API_SECRET) return res.status(401).json({ error: 'Unauthorized' });
+  if (auth !== 'bp_secret_2024') return res.status(401).json({ error: 'Unauthorized' });
 
   try {
     const { jobId, pages, scheduledTime, delay, postData } = req.body;
