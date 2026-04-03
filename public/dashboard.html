@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bulk Poster — Dashboard</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #0f1117;
+      --surface:  #1a1d2e;
+      --surface2: #222538;
+      --border:   #2e3250;
+      --primary:  #4f6ef7;
+      --primary-h:#3d5be0;
+      --success:  #22c55e;
+      --danger:   #ef4444;
+      --warn:     #f59e0b;
+      --text:     #e2e8f0;
+      --muted:    #8892b0;
+      --radius:   12px;
+      --radius-s: 8px;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Tahoma, sans-serif;
+      font-size: 14px;
+      line-height: 1.5;
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .header h1 {
+      font-size: 22px;
+      font-weight: 700;
+    }
+    .header-actions {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 16px;
+      border: none;
+      border-radius: var(--radius-s);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background .15s;
+    }
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-primary:hover { background: var(--primary-h); }
+    .btn-ghost {
+      background: transparent;
+      color: var(--muted);
+      border: 1px solid var(--border);
+    }
+    .btn-ghost:hover { background: var(--surface2); color: var(--text); }
+
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-s);
+      padding: 16px;
+      text-align: center;
+    }
+    .stat-num {
+      font-size: 28px;
+      font-weight: 700;
+      line-height: 1;
+    }
+    .stat-label {
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 4px;
+    }
+    .stat-pending .stat-num { color: var(--warn); }
+    .stat-done .stat-num { color: var(--success); }
+    .stat-error .stat-num { color: var(--danger); }
+
+    .loading {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--muted);
+      font-size: 16px;
+    }
+    .loading .spinner {
+      display: inline-block;
+      width: 28px;
+      height: 28px;
+      border: 3px solid var(--border);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+      margin-bottom: 12px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .empty {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--muted);
+    }
+    .empty .icon { font-size: 48px; margin-bottom: 12px; }
+
+    /* ── Job Card ── */
+    .job-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin-bottom: 16px;
+      overflow: hidden;
+    }
+    .job-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 20px;
+      cursor: pointer;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .job-header:hover { background: var(--surface2); }
+
+    .job-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+      flex: 1;
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .status-pending { background: rgba(245,158,11,.15); color: var(--warn); }
+    .status-done    { background: rgba(34,197,94,.15); color: var(--success); }
+    .status-cancelled { background: rgba(142,142,176,.15); color: var(--muted); }
+
+    .job-meta {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 0;
+    }
+    .job-time {
+      font-weight: 600;
+      font-size: 15px;
+      white-space: nowrap;
+    }
+    .job-id {
+      color: var(--muted);
+      font-size: 11px;
+      font-family: monospace;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .job-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+    .page-count {
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .chevron {
+      color: var(--muted);
+      transition: transform .2s;
+      font-size: 18px;
+    }
+    .job-card.open .chevron { transform: rotate(180deg); }
+
+    /* ── Detail (collapsed by default) ── */
+    .job-detail {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height .3s ease;
+    }
+    .job-card.open .job-detail {
+      max-height: 2000px;
+    }
+    .job-detail-inner {
+      padding: 0 20px 20px;
+      border-top: 1px solid var(--border);
+    }
+
+    .detail-section {
+      margin-top: 14px;
+    }
+    .detail-section-title {
+      font-size: 12px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .5px;
+      margin-bottom: 8px;
+    }
+
+    .post-preview {
+      background: var(--surface2);
+      border-radius: var(--radius-s);
+      padding: 14px;
+      font-size: 13px;
+    }
+    .post-preview .msg {
+      margin-bottom: 8px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .post-preview .link-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--primary);
+      font-size: 12px;
+      word-break: break-all;
+    }
+    .post-preview .card-info {
+      margin-top: 6px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    /* ── Page Result Row ── */
+    .page-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      background: var(--surface2);
+      border-radius: var(--radius-s);
+      margin-bottom: 6px;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .page-name {
+      font-weight: 600;
+      font-size: 13px;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .page-status {
+      font-size: 12px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .page-status.ok { color: var(--success); }
+    .page-status.fail { color: var(--danger); }
+    .page-status.wait { color: var(--warn); }
+
+    .auto-refresh {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    @media (max-width: 500px) {
+      body { padding: 12px; }
+      .header h1 { font-size: 18px; }
+      .job-header { padding: 12px 14px; }
+      .job-detail-inner { padding: 0 14px 14px; }
+      .stat-num { font-size: 22px; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Bulk Poster Dashboard</h1>
+  <div class="header-actions">
+    <span class="auto-refresh" id="lastUpdate"></span>
+    <button class="btn btn-ghost" onclick="loadJobs()">Refresh</button>
+    <a href="/" class="btn btn-primary">โพสต์ใหม่</a>
+  </div>
+</div>
+
+<div class="stats-row" id="statsRow" style="display:none">
+  <div class="stat-card stat-all">
+    <div class="stat-num" id="statTotal">0</div>
+    <div class="stat-label">ทั้งหมด</div>
+  </div>
+  <div class="stat-card stat-pending">
+    <div class="stat-num" id="statPending">0</div>
+    <div class="stat-label">รอ publish</div>
+  </div>
+  <div class="stat-card stat-done">
+    <div class="stat-num" id="statDone">0</div>
+    <div class="stat-label">สำเร็จ</div>
+  </div>
+  <div class="stat-card stat-error">
+    <div class="stat-num" id="statError">0</div>
+    <div class="stat-label">มีปัญหา</div>
+  </div>
+</div>
+
+<div id="content">
+  <div class="loading">
+    <div class="spinner"></div>
+    <div>กำลังโหลด...</div>
+  </div>
+</div>
+
+<script>
+const API = '/api/jobs';
+let allJobs = [];
+
+function fmtDate(ts) {
+  if (!ts) return '-';
+  const d = new Date(ts);
+  const now = new Date();
+  const pad = n => String(n).padStart(2, '0');
+
+  const time = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const day = `${pad(d.getDate())}/${pad(d.getMonth() + 1)}`;
+
+  // ถ้าเป็นวันนี้ แสดงแค่เวลา
+  if (d.toDateString() === now.toDateString()) return `วันนี้ ${time}`;
+  // ถ้าเป็นพรุ่งนี้
+  const tmr = new Date(now); tmr.setDate(tmr.getDate() + 1);
+  if (d.toDateString() === tmr.toDateString()) return `พรุ่งนี้ ${time}`;
+
+  return `${day} ${time}`;
+}
+
+function fmtFull(ts) {
+  if (!ts) return '-';
+  const d = new Date(ts);
+  const pad = n => String(n).padStart(2, '0');
+  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
+function statusBadge(job) {
+  const s = job.status || 'pending';
+  if (s === 'done') {
+    // เช็คว่ามี error ไหม
+    const results = job.results || {};
+    const hasError = Object.values(results).some(r => !r.success);
+    if (hasError) return `<span class="status-badge status-done">Done (มี error)</span>`;
+    return `<span class="status-badge status-done">Done</span>`;
+  }
+  if (s === 'cancelled') return `<span class="status-badge status-cancelled">Cancelled</span>`;
+  // pending — เช็คว่าเลยเวลาแล้วหรือยัง
+  const now = Date.now();
+  if (job.scheduledTime && job.scheduledTime < now) {
+    return `<span class="status-badge status-pending">รอ publish...</span>`;
+  }
+  return `<span class="status-badge status-pending">ตั้งเวลาไว้</span>`;
+}
+
+function pageStatusHtml(page, results) {
+  const r = results[page.id];
+  if (!r) return `<span class="page-status wait">รอ</span>`;
+  if (r.success) return `<span class="page-status ok">สำเร็จ</span>`;
+  return `<span class="page-status fail" title="${r.error || ''}">${r.error ? r.error.substring(0, 40) : 'ผิดพลาด'}</span>`;
+}
+
+function renderJobs(jobs) {
+  const $content = document.getElementById('content');
+  const $stats = document.getElementById('statsRow');
+
+  if (!jobs.length) {
+    $stats.style.display = 'none';
+    $content.innerHTML = `
+      <div class="empty">
+        <div class="icon">📋</div>
+        <div>ยังไม่มี job ที่ตั้งเวลาไว้</div>
+      </div>`;
+    return;
+  }
+
+  // Stats
+  $stats.style.display = '';
+  let pending = 0, done = 0, errCount = 0;
+  jobs.forEach(j => {
+    if (j.status === 'done') {
+      const hasErr = Object.values(j.results || {}).some(r => !r.success);
+      if (hasErr) errCount++; else done++;
+    } else {
+      pending++;
+    }
+  });
+  document.getElementById('statTotal').textContent = jobs.length;
+  document.getElementById('statPending').textContent = pending;
+  document.getElementById('statDone').textContent = done;
+  document.getElementById('statError').textContent = errCount;
+
+  // Sort: pending first (newest scheduled), then done
+  jobs.sort((a, b) => {
+    if (a.status !== b.status) {
+      if (a.status === 'pending') return -1;
+      if (b.status === 'pending') return 1;
+    }
+    return (b.scheduledTime || 0) - (a.scheduledTime || 0);
+  });
+
+  let html = '';
+  jobs.forEach(job => {
+    const pages = job.pages || [];
+    const results = job.results || {};
+    const pd = job.postData || {};
+    const donePages = Object.keys(results).length;
+
+    html += `
+    <div class="job-card" data-id="${job.jobId}">
+      <div class="job-header" onclick="toggleJob(this)">
+        <div class="job-left">
+          ${statusBadge(job)}
+          <div class="job-meta">
+            <div class="job-time">${fmtDate(job.scheduledTime)}</div>
+            <div class="job-id">${job.jobId}</div>
+          </div>
+        </div>
+        <div class="job-right">
+          <span class="page-count">${donePages}/${pages.length} เพจ</span>
+          <span class="chevron">▾</span>
+        </div>
+      </div>
+      <div class="job-detail">
+        <div class="job-detail-inner">
+
+          ${pd.message || pd.link ? `
+          <div class="detail-section">
+            <div class="detail-section-title">เนื้อหาโพส</div>
+            <div class="post-preview">
+              ${pd.message ? `<div class="msg">${escHtml(pd.message)}</div>` : ''}
+              ${pd.link ? `<div class="link-row">🔗 ${escHtml(pd.link)}</div>` : ''}
+              ${pd.name ? `<div class="card-info"><b>Card Title:</b> ${escHtml(pd.name)}</div>` : ''}
+              ${pd.description ? `<div class="card-info"><b>Description:</b> ${escHtml(pd.description)}</div>` : ''}
+              ${pd.cta ? `<div class="card-info"><b>CTA:</b> ${escHtml(pd.cta)}</div>` : ''}
+            </div>
+          </div>` : ''}
+
+          <div class="detail-section">
+            <div class="detail-section-title">สถานะแต่ละเพจ</div>
+            ${pages.map(p => `
+              <div class="page-row">
+                <span class="page-name">${escHtml(p.name || p.id)}</span>
+                ${pageStatusHtml(p, results)}
+              </div>
+            `).join('')}
+          </div>
+
+          <div class="detail-section">
+            <div class="detail-section-title">ข้อมูลเพิ่มเติม</div>
+            <div class="post-preview" style="font-size:12px;color:var(--muted)">
+              <div>สร้างเมื่อ: ${fmtFull(job.createdAt)}</div>
+              <div>ตั้งเวลา: ${fmtFull(job.scheduledTime)}</div>
+              ${job.executedAt ? `<div>Publish เสร็จ: ${fmtFull(job.executedAt)}</div>` : ''}
+              ${job.delay ? `<div>ดีเลย์ระหว่างเพจ: ${job.delay / 1000} วินาที</div>` : ''}
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>`;
+  });
+
+  $content.innerHTML = html;
+}
+
+function escHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function toggleJob(el) {
+  el.closest('.job-card').classList.toggle('open');
+}
+
+async function loadJobs() {
+  try {
+    const resp = await fetch(API);
+    const data = await resp.json();
+    allJobs = data.jobs || [];
+    renderJobs(allJobs);
+    document.getElementById('lastUpdate').textContent = 'อัพเดท ' + new Date().toLocaleTimeString('th-TH');
+  } catch (err) {
+    document.getElementById('content').innerHTML = `
+      <div class="empty">
+        <div class="icon">⚠️</div>
+        <div>โหลดข้อมูลไม่ได้: ${err.message}</div>
+      </div>`;
+  }
+}
+
+// โหลดทันที + auto refresh ทุก 30 วินาที
+loadJobs();
+setInterval(loadJobs, 30000);
+</script>
+
+</body>
+</html>

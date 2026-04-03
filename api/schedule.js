@@ -1,13 +1,10 @@
-// POST /api/schedule — รับ prepared posts จาก extension แล้วตั้งเวลา publish ผ่าน QStash
+// POST /api/schedule — รับ prepared posts จาก extension แล้วตั้งเวลา publish ผ่าน QStash REST API
 import { Redis } from '@upstash/redis';
-import { Client } from '@upstash/qstash';
 
 const redis = new Redis({
   url: process.env.UPSTASH_REDIS_REST_URL,
   token: process.env.UPSTASH_REDIS_REST_TOKEN,
 });
-
-const qstash = new Client({ token: process.env.QSTASH_TOKEN });
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
@@ -36,19 +33,32 @@ export default async function handler(req, res) {
     await redis.set(`job:${jobId}`, JSON.stringify(job), { ex: 604800 });
     await redis.sadd('jobs:all', jobId);
 
-    // ตั้ง QStash schedule แยกต่อเพจ
+    // ตั้ง QStash schedule แยกต่อเพจ — ใช้ REST API ตรงๆ แทน SDK
     const baseUrl = `https://${req.headers.host}/api/publish`;
+    const qstashToken = process.env.QSTASH_TOKEN;
     const qstashIds = [];
 
     for (let i = 0; i < pages.length; i++) {
       const fireAt = Math.floor((scheduledTime + i * (delay || 0)) / 1000);
-      const msg = await qstash.publishJSON({
-        url: baseUrl,
-        body: { jobId, pageIndex: i },
-        notBefore: fireAt,
-        retries: 3,
+      const qstashResp = await fetch(`https://qstash-us-east-1.upstash.io/v2/publish/${baseUrl}`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${qstashToken}`,
+          'Content-Type': 'application/json',
+          'Upstash-Not-Before': String(fireAt),
+          'Upstash-Retries': '3',
+        },
+        body: JSON.stringify({ jobId, pageIndex: i }),
       });
-      qstashIds.push(msg.messageId);
+
+      const qstashData = await qstashResp.json();
+
+      if (!qstashResp.ok) {
+        console.error('QStash publish error:', qstashData);
+        throw new Error(`QStash error: ${JSON.stringify(qstashData)}`);
+      }
+
+      qstashIds.push(qstashData.messageId);
     }
 
     // เก็บ QStash message IDs สำหรับ cancel
