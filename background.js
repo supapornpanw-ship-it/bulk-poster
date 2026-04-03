@@ -880,6 +880,76 @@ function handleApiRequest(request, sender, sendResponse) {
       return result;
     }
 
+    // ── Bulk Post Now — ทำทั้งหมดใน service worker ปิดแท็บได้ ──
+    if (request.type === 'BULK_POST_NOW') {
+      const { pages, postData, delay, adAccountId } = request;
+      const { userToken } = await chrome.storage.local.get('userToken');
+
+      // ตอบกลับทันทีว่ารับงานแล้ว — ทำงานต่อใน background
+      const jobId = `bp_now_${Date.now()}`;
+
+      // ทำงานใน background (ไม่ block response)
+      (async () => {
+        const results = {};
+        for (let i = 0; i < pages.length; i++) {
+          const page = pages[i];
+          try {
+            let res;
+            if (adAccountId && userToken) {
+              res = await postViaAdsAPI(adAccountId, page, postData, userToken);
+              results[page.id] = { success: true, postId: res.id, pageName: page.name };
+            } else {
+              const params = { access_token: page.access_token, published: 'true' };
+              if (postData.link)    params.link    = postData.link;
+              if (postData.message) params.message = postData.message;
+              res = await fbPost(`/${page.id}/feed`, params);
+              if (res.error) {
+                results[page.id] = { success: false, error: res.error.message, pageName: page.name };
+              } else {
+                results[page.id] = { success: true, postId: res.id, pageName: page.name };
+              }
+            }
+          } catch (err) {
+            results[page.id] = { success: false, error: err.message, pageName: page.name };
+          }
+
+          // อัพเดท progress ใน storage ให้ UI poll ได้
+          await chrome.storage.local.set({
+            [`bulkProgress_${jobId}`]: {
+              done: i + 1,
+              total: pages.length,
+              currentPage: page.name,
+              results: { ...results },
+            }
+          });
+
+          // delay ระหว่างเพจ
+          if (delay > 0 && i < pages.length - 1) {
+            await new Promise(r => setTimeout(r, Math.min(delay, 30 * 60000)));
+          }
+        }
+
+        // บันทึกประวัติ
+        await addHistory({
+          id: jobId,
+          link: postData.link, message: postData.message,
+          pages, results, postedAt: Date.now(), type: 'immediate', status: 'done'
+        });
+
+        // แจ้งเตือน
+        const okCount = Object.values(results).filter(r => r.success).length;
+        chrome.notifications.create(`done_${jobId}`, {
+          type: 'basic', iconUrl: 'icon128.png', title: 'Bulk Poster',
+          message: `โพสต์เสร็จ! สำเร็จ ${okCount}/${pages.length} เพจ`
+        });
+
+        // ลบ progress
+        await chrome.storage.local.remove(`bulkProgress_${jobId}`);
+      })();
+
+      return { success: true, jobId };
+    }
+
     if (request.type === 'ADD_HISTORY') {
       await addHistory(request.entry);
       return { success: true };

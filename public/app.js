@@ -43,6 +43,37 @@ const pingTimer = setInterval(() => {
   }
 }, 500);
 
+// ── ตรวจจับ extension context invalidated → แจ้งเตือน refresh ──
+let wasReady = false;
+setInterval(() => {
+  if (extReady && !wasReady) wasReady = true;
+  if (!wasReady) return;
+  // เคย connect ได้ ลอง ping ดูว่ายัง alive ไหม
+  const testId = '_hb_' + Math.random().toString(36).slice(2);
+  let replied = false;
+  pending[testId] = () => { replied = true; };
+  window.postMessage({ direction: 'from-page-script', messageId: testId, message: { type: 'GET_PAGES' } }, '*');
+  setTimeout(() => {
+    delete pending[testId];
+    if (!replied && wasReady) {
+      extReady = false;
+      wasReady = false;
+      // แสดงแจ้งเตือน
+      if (!document.getElementById('extLostBanner')) {
+        const banner = document.createElement('div');
+        banner.id = 'extLostBanner';
+        banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:#ef4444;color:#fff;text-align:center;padding:12px;font-weight:600;cursor:pointer;font-size:14px;';
+        banner.textContent = '⚠️ Extension ขาดการเชื่อมต่อ — คลิกที่นี่เพื่อ Refresh';
+        banner.onclick = () => location.reload();
+        document.body.appendChild(banner);
+      }
+    }
+  }, 3000);
+}, 30000); // เช็คทุก 30 วินาที
+
+// ── ซ่อน ping timer เดิม (ด้านบน) ── จบที่นี่
+}, 500);
+
 // ─── State ────────────────────────────────────────────────────
 let pages = [];
 let selectedIds = new Set();
