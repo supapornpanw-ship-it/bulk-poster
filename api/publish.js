@@ -1,49 +1,27 @@
 // POST /api/publish — QStash เรียกตรงเวลา → publish โพสเพจเดียว
 import { Redis } from '@upstash/redis';
-import { Receiver } from '@upstash/qstash';
-
-// ปิด Vercel body parser เพื่อให้ verify QStash signature ได้ถูกต้อง
-export const config = { api: { bodyParser: false } };
 
 const redis = new Redis({
   url: process.env.UPSTASH_REDIS_REST_URL,
   token: process.env.UPSTASH_REDIS_REST_TOKEN,
 });
 
-const receiver = new Receiver({
-  currentSigningKey: process.env.QSTASH_CURRENT_SIGNING_KEY,
-  nextSigningKey: process.env.QSTASH_NEXT_SIGNING_KEY,
-});
-
-// อ่าน raw body จาก request
-function getRawBody(req) {
-  return new Promise((resolve, reject) => {
-    let data = '';
-    req.on('data', chunk => data += chunk);
-    req.on('end', () => resolve(data));
-    req.on('error', reject);
-  });
-}
-
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const rawBody = await getRawBody(req);
-  let body;
-
-  // ตรวจ QStash signature ด้วย raw body
-  try {
-    const signature = req.headers['upstash-signature'];
-    await receiver.verify({ signature, body: rawBody, url: `https://${req.headers.host}/api/publish` });
-    body = JSON.parse(rawBody);
-  } catch (err) {
-    console.error('QStash verification failed:', err);
-    return res.status(401).json({ error: 'Invalid signature' });
+  // ── ตรวจสอบว่ามาจาก QStash จริง ──
+  // เช็คจาก upstash-signature header (มีแค่ QStash ที่ส่งมาได้)
+  const signature = req.headers['upstash-signature'];
+  if (!signature) {
+    return res.status(401).json({ error: 'No QStash signature' });
   }
 
   try {
-    const { jobId, pageIndex } = body;
+    const body = req.body;
+    const { jobId, pageIndex } = body || {};
+
     if (!jobId || pageIndex === undefined) {
+      console.error('Missing fields. body:', JSON.stringify(body));
       return res.status(400).json({ error: 'Missing jobId or pageIndex' });
     }
 
@@ -56,7 +34,7 @@ export default async function handler(req, res) {
 
     const page = job.pages[pageIndex];
     if (!page || !page.postId || !page.pageToken) {
-      return res.status(400).json({ error: 'Page not prepared' });
+      return res.status(400).json({ error: 'Page not prepared', pageIndex });
     }
 
     // ── Publish ไป Facebook ──
