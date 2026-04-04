@@ -348,10 +348,94 @@ async function doPostNow(selPages, postData, delay, adAccountId) {
 
 async function doSchedule(selPages, postData, delay, scheduledTime, adAccountId) {
   const btn = document.getElementById('btnPost');
+  const progEl = document.getElementById('progressWrap');
+  const bar = document.getElementById('progressBar');
+  const label = document.getElementById('progressLabel');
+  const logEl = document.getElementById('progressLog');
+
   btn.disabled = true;
+  progEl.style.display = '';
+  logEl.innerHTML = '';
+  bar.style.width = '0%';
+  label.textContent = `กำลังเตรียม Card Link...`;
+
+  // แสดง log เตรียมเพจทั้งหมด
+  const logRow = document.createElement('div');
+  logRow.className = 'log-row log-pending';
+  logRow.textContent = `⏳ ส่งคำสั่งตั้งเวลา ${selPages.length} เพจ...`;
+  logEl.appendChild(logRow);
+
   try {
     const res = await sendExt({ type: 'SCHEDULE_POST', pages: selPages, postData, delay, scheduledTime, adAccountId });
     const jobId = res.jobId || res.id;
+
+    logRow.className = 'log-row log-ok';
+    logRow.textContent = `✓ รับคำสั่งแล้ว — กำลังเตรียม Card Link...`;
+    bar.style.width = '10%';
+
+    // poll สถานะเตรียม Card Link จาก extension
+    let prepDone = false;
+    for (let tick = 0; tick < 120 && !prepDone; tick++) {
+      await sleep(3000);
+      try {
+        const status = await sendExt({ type: 'GET_JOB_STATUS', jobId });
+        if (!status) continue;
+
+        const pages = status.pages || [];
+        const ps = status.pageStatuses || {};
+        const prepared = status.preparedPosts || {};
+
+        // อัพเดท log
+        logEl.innerHTML = '';
+        let okCount = 0;
+        for (let i = 0; i < pages.length; i++) {
+          const p = pages[i];
+          const s = ps[i] || {};
+          const row = document.createElement('div');
+
+          if (s.status === 'error') {
+            row.className = 'log-row log-err';
+            row.textContent = `✗ ${p.name} — ${s.error || 'error'}`;
+          } else if (prepared[i] && prepared[i].postId) {
+            row.className = 'log-row log-ok';
+            row.textContent = `✓ ${p.name} — Card Link พร้อม`;
+            okCount++;
+          } else if (s.status === 'preparing' || status.status === 'preparing') {
+            row.className = 'log-row log-pending';
+            row.textContent = `⏳ ${p.name} — กำลังเตรียม...`;
+          } else if (s.status === 'waiting') {
+            row.className = 'log-row log-ok';
+            row.textContent = `✓ ${p.name} — พร้อมแล้ว รอเวลาโพส`;
+            okCount++;
+          } else {
+            row.className = 'log-row log-pending';
+            row.textContent = `⏳ ${p.name} — รอ...`;
+          }
+          logEl.appendChild(row);
+        }
+
+        const pct = Math.round(10 + (okCount / pages.length) * 80);
+        bar.style.width = pct + '%';
+        label.textContent = `เตรียม Card Link ${okCount}/${pages.length} เพจ`;
+
+        // เช็คว่าเตรียมครบหรือยัง
+        if (status.status === 'pending' || status.status === 'done') {
+          prepDone = true;
+          bar.style.width = '100%';
+
+          if (status.serverScheduled) {
+            label.textContent = `✅ ตั้งเวลาสำเร็จ ${okCount}/${pages.length} เพจ — ปิดคอมได้เลย!`;
+          } else {
+            label.textContent = `✅ ตั้งเวลาสำเร็จ ${okCount}/${pages.length} เพจ — เปิด Chrome ค้างไว้`;
+          }
+        }
+      } catch {}
+    }
+
+    if (!prepDone) {
+      label.textContent = `⏳ กำลังเตรียมอยู่... ดูสถานะได้ที่แท็บ "รายการตั้งเวลา"`;
+    }
+
     const confirmEl = document.getElementById('schedConfirm');
     confirmEl.innerHTML = `
       ✅ <strong>ตั้งเวลาสำเร็จ!</strong><br/>
@@ -362,9 +446,11 @@ async function doSchedule(selPages, postData, delay, scheduledTime, adAccountId)
     confirmEl.style.display = '';
     loadScheduled();
     updateSchedBadge();
-    // เริ่ม polling สถานะ
     if (jobId) startJobPolling(jobId);
   } catch (e) {
+    logRow.className = 'log-row log-err';
+    logRow.textContent = `✗ ${e.message}`;
+    label.textContent = 'เกิดข้อผิดพลาด';
     alert('เกิดข้อผิดพลาด: ' + e.message);
   } finally {
     btn.disabled = false;
