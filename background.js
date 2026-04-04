@@ -102,6 +102,8 @@ async function extractTokenFromPage(pageUrl) {
 
 async function getOrExtractToken() {
   const { userToken, tokenExpiry } = await chrome.storage.local.get(['userToken', 'tokenExpiry']);
+  // ถ้ามี token อยู่ ใช้ได้เลย (long-lived token ไม่หมดอายุ)
+  if (userToken && userToken.startsWith('EAA')) return userToken;
   if (userToken && tokenExpiry && Date.now() < tokenExpiry) return userToken;
   return null;
 }
@@ -844,12 +846,24 @@ function handleApiRequest(request, sender, sendResponse) {
     // ── Bulk Poster API ──────────────────────────────────────────────────
 
     if (request.type === 'GET_AD_ACCOUNTS') {
-      let data = await fbGet('/me/adaccounts?fields=id,name&limit=100');
-      if (data.error) {
-        const token = await getOrExtractToken();
-        if (token) data = await fbGet('/me/adaccounts?fields=id,name&limit=100', token);
+      const { userToken } = await chrome.storage.local.get('userToken');
+      const token = userToken || await getOrExtractToken();
+      let data = await fbGet('/me/adaccounts?fields=id,name&limit=100', token);
+      if (data.error && !token) {
+        const extracted = await extractAndSaveToken();
+        if (extracted) data = await fbGet('/me/adaccounts?fields=id,name&limit=100', extracted);
       }
       return data;
+    }
+
+    if (request.type === 'CHECK_TOKEN') {
+      const { userToken, tokenExpiry } = await chrome.storage.local.get(['userToken', 'tokenExpiry']);
+      return {
+        hasToken: !!userToken,
+        tokenPrefix: userToken ? userToken.substring(0, 15) + '...' : null,
+        expiry: tokenExpiry,
+        expired: tokenExpiry ? Date.now() > tokenExpiry : true,
+      };
     }
 
     if (request.type === 'POST_TO_PAGE') {
