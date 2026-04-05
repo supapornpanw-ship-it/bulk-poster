@@ -570,9 +570,10 @@ async function prepareScheduledJob(jobId, pages, postData, delay, scheduledTime,
     }
     await saveScheduledJobs(jobs);
 
-    // ดีเลย์ระหว่างเพจ (max 30 วิ)
-    if (i < pages.length - 1 && delay > 0) {
-      await new Promise(r => setTimeout(r, Math.min(delay, 30000)));
+    // ดีเลย์ระหว่างเพจตอนสร้าง Card Link (20-30 วิ สุ่ม ป้องกัน ad account โดนแจ้งเตือน)
+    if (i < pages.length - 1) {
+      const createDelay = 20000 + Math.floor(Math.random() * 10000); // 20-30 วินาที
+      await new Promise(r => setTimeout(r, createDelay));
     }
   }
 
