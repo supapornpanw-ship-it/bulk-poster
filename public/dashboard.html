@@ -284,6 +284,9 @@
       color: var(--muted);
       font-size: 12px;
     }
+    .btn-danger { background: var(--danger); color: #fff; }
+    .btn-danger:hover { background: #dc2626; }
+    .btn-danger:disabled { opacity: .5; cursor: not-allowed; }
 
     @media (max-width: 500px) {
       body { padding: 12px; }
@@ -481,6 +484,11 @@ function renderJobs(jobs) {
             </div>
           </div>
 
+          ${job.status === 'pending' ? `
+          <div class="detail-section" style="margin-top:16px">
+            <button class="btn btn-danger" onclick="cancelJob('${job.jobId}', this)">ยกเลิก Job นี้</button>
+          </div>` : ''}
+
         </div>
       </div>
     </div>`;
@@ -512,6 +520,31 @@ async function loadJobs() {
         <div class="icon">⚠️</div>
         <div>โหลดข้อมูลไม่ได้: ${err.message}</div>
       </div>`;
+  }
+}
+
+async function cancelJob(jobId, btnEl) {
+  if (!confirm('ยกเลิก Job นี้?')) return;
+  btnEl.disabled = true;
+  btnEl.textContent = 'กำลังยกเลิก...';
+  try {
+    const resp = await fetch('/api/cancel', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-bp-secret': 'bp_secret_2024' },
+      body: JSON.stringify({ jobId }),
+    });
+    const data = await resp.json();
+    if (data.success) {
+      loadJobs();
+    } else {
+      alert('ยกเลิกไม่สำเร็จ: ' + (data.error || 'unknown'));
+      btnEl.disabled = false;
+      btnEl.textContent = 'ยกเลิก Job นี้';
+    }
+  } catch (err) {
+    alert('Error: ' + err.message);
+    btnEl.disabled = false;
+    btnEl.textContent = 'ยกเลิก Job นี้';
   }
 }
 
