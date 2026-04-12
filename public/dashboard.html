@@ -447,7 +447,7 @@ function renderJobs(jobs) {
     <div class="job-card" data-id="${job.jobId}">
       <div class="job-header" onclick="toggleJob(this)">
         <div class="job-left">
-          ${pd.imageUrl ? `<img class="job-thumb" src="${escHtml(pd.imageUrl)}" alt="" onerror="this.style.display='none'">` : ''}
+          ${pd.thumbnail ? `<img class="job-thumb" src="${pd.thumbnail}" alt="">` : ''}
           ${statusBadge(job)}
           <div class="job-meta">
             <div class="job-time">${fmtDate(job.scheduledTime)}</div>

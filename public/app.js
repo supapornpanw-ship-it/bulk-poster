@@ -216,14 +216,32 @@ document.getElementById('destLink').addEventListener('blur', async function () {
 const imageDrop = document.getElementById('imageDrop');
 const imageFile = document.getElementById('imageFile');
 let currentImageData = null; // base64 data URL ของรูปที่เลือก
+let currentThumbnail = null; // thumbnail เล็กๆ สำหรับ dashboard
+
+function makeThumbnail(dataUrl, maxSize = 80) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const scale = Math.min(maxSize / img.width, maxSize / img.height, 1);
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL('image/jpeg', 0.6));
+    };
+    img.onerror = () => resolve(null);
+    img.src = dataUrl;
+  });
+}
 
 imageDrop.addEventListener('click', () => imageFile.click());
 imageFile.addEventListener('change', (e) => {
   const file = e.target.files[0];
   if (!file) return;
   const reader = new FileReader();
-  reader.onload = (ev) => {
+  reader.onload = async (ev) => {
     currentImageData = ev.target.result;
+    currentThumbnail = await makeThumbnail(ev.target.result);
     document.getElementById('imagePreview').src = ev.target.result;
     document.getElementById('imagePreview').style.display = '';
     document.getElementById('imagePrompt').style.display = 'none';
@@ -279,7 +297,7 @@ document.getElementById('btnPost').addEventListener('click', async () => {
   if (!selectedIds.size) return alert('กรุณาเลือกเพจอย่างน้อย 1 เพจ');
 
   const selPages = pages.filter(p => selectedIds.has(p.id));
-  const postData = { link, message, name, description, caption, cta, imageData: currentImageData };
+  const postData = { link, message, name, description, caption, cta, imageData: currentImageData, thumbnail: currentThumbnail };
 
   if (isSchedule) {
     const dtVal = document.getElementById('schedDT').value;
