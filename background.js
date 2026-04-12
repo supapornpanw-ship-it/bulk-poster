@@ -347,7 +347,7 @@ async function postViaAdsAPI(adAccountId, page, postData, userToken, scheduledTi
     if (publishData.error) throw new Error('Publish failed: ' + publishData.error.message);
   }
 
-  return { id: postId, pageToken: page.access_token };
+  return { id: postId, pageToken: page.access_token, imageUrl };
 }
 
 // ── ตั้งเวลาโพสผ่าน Feed API + Redirect URL (Facebook native schedule) ──
@@ -554,6 +554,7 @@ async function prepareScheduledJob(jobId, pages, postData, delay, scheduledTime,
 
   if (!job.results) job.results = {};
   let okCount = 0;
+  let savedImageUrl = null;
 
   for (let i = 0; i < pages.length; i++) {
     try {
@@ -563,6 +564,7 @@ async function prepareScheduledJob(jobId, pages, postData, delay, scheduledTime,
         const res = await postViaAdsAPI(adAccountId, pages[i], pd, userToken, scheduledTime);
         job.preparedPosts[i] = { postId: res.id, pageToken: res.pageToken };
         job.pageStatuses[i] = { status: 'waiting', fireAt: scheduledTime, error: null };
+        if (!savedImageUrl && res.imageUrl) savedImageUrl = res.imageUrl;
         okCount++;
       }
     } catch (err) {
@@ -599,7 +601,7 @@ async function prepareScheduledJob(jobId, pages, postData, delay, scheduledTime,
           pages: serverPages,
           scheduledTime,
           delay: delay || 0,
-          postData: { link: postData.link, message: postData.message, name: postData.name, description: postData.description, caption: postData.caption, cta: postData.cta },
+          postData: { link: postData.link, message: postData.message, name: postData.name, description: postData.description, caption: postData.caption, cta: postData.cta, imageUrl: savedImageUrl },
         }),
       });
       const srvData = await resp.json();

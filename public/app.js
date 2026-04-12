@@ -45,31 +45,35 @@ const pingTimer = setInterval(() => {
 
 // ── ตรวจจับ extension context invalidated → แจ้งเตือน refresh ──
 let wasReady = false;
+let hbFailCount = 0;
 setInterval(() => {
   if (extReady && !wasReady) wasReady = true;
-  if (!wasReady) return;
-  // เคย connect ได้ ลอง ping ดูว่ายัง alive ไหม
+  if (!wasReady || isPosting) return; // ไม่เช็คตอนกำลังโพส/เตรียม Card Link
   const testId = '_hb_' + Math.random().toString(36).slice(2);
   let replied = false;
-  pending[testId] = () => { replied = true; };
+  pending[testId] = () => { replied = true; hbFailCount = 0; };
   window.postMessage({ direction: 'from-page-script', messageId: testId, message: { type: 'GET_PAGES' } }, '*');
   setTimeout(() => {
     delete pending[testId];
-    if (!replied && wasReady) {
-      extReady = false;
-      wasReady = false;
-      // แสดงแจ้งเตือน
-      if (!document.getElementById('extLostBanner')) {
-        const banner = document.createElement('div');
-        banner.id = 'extLostBanner';
-        banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:#ef4444;color:#fff;text-align:center;padding:12px;font-weight:600;cursor:pointer;font-size:14px;';
-        banner.textContent = '⚠️ Extension ขาดการเชื่อมต่อ — คลิกที่นี่เพื่อ Refresh';
-        banner.onclick = () => location.reload();
-        document.body.appendChild(banner);
+    if (!replied) {
+      hbFailCount++;
+      // ต้อง fail 3 ครั้งติดถึงจะแจ้งเตือน (ป้องกัน false positive ตอน busy)
+      if (hbFailCount >= 3 && wasReady) {
+        extReady = false;
+        wasReady = false;
+        hbFailCount = 0;
+        if (!document.getElementById('extLostBanner')) {
+          const banner = document.createElement('div');
+          banner.id = 'extLostBanner';
+          banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:#ef4444;color:#fff;text-align:center;padding:12px;font-weight:600;cursor:pointer;font-size:14px;';
+          banner.textContent = '⚠️ Extension ขาดการเชื่อมต่อ — คลิกที่นี่เพื่อ Refresh';
+          banner.onclick = () => location.reload();
+          document.body.appendChild(banner);
+        }
       }
     }
-  }, 3000);
-}, 30000); // เช็คทุก 30 วินาที
+  }, 5000);
+}, 30000);
 
 // ── จบ disconnect detection ──
 
