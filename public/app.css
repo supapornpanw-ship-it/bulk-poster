@@ -564,7 +564,10 @@ input[type="datetime-local"].inp { color-scheme: dark; }
 .fb-preview-img img {
   width: 100%;
   height: auto;
+  max-height: 500px;
+  object-fit: contain;
   display: block;
+  background: #3a3b3c;
 }
 .fb-preview-img:hover {
   opacity: .85;
