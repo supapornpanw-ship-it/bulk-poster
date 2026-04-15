@@ -744,9 +744,9 @@ function trunc(s, n) { return s && s.length > n ? s.slice(0, n) + '…' : (s || 
 // ═══════════════════════════════════════════════════════════════
 // ─── Mode Tab Switching ──────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════
-document.querySelectorAll('.mode-tab').forEach(btn => {
+document.querySelectorAll('.nav-item[data-mode]').forEach(btn => {
   btn.addEventListener('click', () => {
-    document.querySelectorAll('.mode-tab').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.nav-item[data-mode]').forEach(b => b.classList.remove('active'));
     document.querySelectorAll('.mode-content').forEach(c => c.classList.remove('active'));
     btn.classList.add('active');
     document.getElementById('mode' + btn.dataset.mode.charAt(0).toUpperCase() + btn.dataset.mode.slice(1)).classList.add('active');

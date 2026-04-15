@@ -3,11 +3,16 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Bulk Poster — โพสต์หลายเพจพร้อมกัน</title>
+  <title>Bulk Poster</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="app.css" />
 </head>
 <body>
 
+<!-- ════════════════════════════════════════════════════════════ -->
+<!-- ── Fullscreen: No Extension ───────────────────────────── -->
+<!-- ════════════════════════════════════════════════════════════ -->
 <div id="noExtScreen" class="fullscreen-msg" style="display:none">
   <div class="msg-box">
     <div class="msg-icon">🔌</div>
@@ -17,274 +22,288 @@
   </div>
 </div>
 
+<!-- ════════════════════════════════════════════════════════════ -->
+<!-- ── Fullscreen: Connect Facebook ───────────────────────── -->
+<!-- ════════════════════════════════════════════════════════════ -->
 <div id="connectScreen" class="fullscreen-msg">
   <div class="msg-box">
     <div class="msg-icon">🔗</div>
     <h2>เชื่อมต่อ Facebook</h2>
+    <p>ล็อกอิน Facebook ในเบราว์เซอร์นี้ แล้วกดปุ่มด้านล่าง<br>ระบบจะดึง Token จาก session โดยอัตโนมัติ</p>
 
-    <p style="color:var(--muted);font-size:13px;margin-bottom:16px;line-height:1.6">
-      ล็อกอิน Facebook ในเบราว์เซอร์นี้ แล้วกดปุ่มด้านล่าง<br>
-      ระบบจะดึง Token จาก session โดยอัตโนมัติ
-    </p>
-
-    <button id="btnConnect" class="btn btn-primary" style="width:100%;padding:12px;font-size:15px">
-      เชื่อมต่อ Facebook อัตโนมัติ
-    </button>
+    <button id="btnConnect" class="btn btn-primary btn-lg">เชื่อมต่อ Facebook อัตโนมัติ</button>
     <div id="connectError" class="error-inline" style="display:none"></div>
 
-    <div style="margin-top:20px;border-top:1px solid rgba(255,255,255,.08);padding-top:16px;">
-      <details>
-        <summary style="color:var(--muted);font-size:12px;cursor:pointer;user-select:none">
-          เชื่อมต่อไม่ได้? วาง Token เอง
-        </summary>
-        <div style="margin-top:10px">
-          <div class="token-steps" style="margin-bottom:10px">
-            <ol class="step-list" style="font-size:12px">
-              <li>เปิด <a href="https://developers.facebook.com/tools/explorer/" target="_blank">Graph API Explorer</a></li>
-              <li>กด Generate Access Token แล้ว Copy</li>
-            </ol>
-          </div>
-          <div class="row-gap">
-            <input id="manualToken" type="text" class="inp" placeholder="EAAxxxxxxxx..." />
-            <button id="btnSaveToken" class="btn btn-ghost">บันทึก</button>
-          </div>
+    <details class="manual-fallback">
+      <summary>เชื่อมต่อไม่ได้? วาง Token เอง</summary>
+      <div class="manual-fallback-body">
+        <ol class="step-list">
+          <li>เปิด <a href="https://developers.facebook.com/tools/explorer/" target="_blank">Graph API Explorer</a></li>
+          <li>กด Generate Access Token แล้ว Copy</li>
+        </ol>
+        <div class="row-gap" style="margin-top:10px">
+          <input id="manualToken" type="text" class="inp" placeholder="EAAxxxxxxxx..." />
+          <button id="btnSaveToken" class="btn btn-ghost">บันทึก</button>
         </div>
-      </details>
-    </div>
+      </div>
+    </details>
   </div>
 </div>
 
-<div id="mainApp" style="display:none">
+<!-- ════════════════════════════════════════════════════════════ -->
+<!-- ── Main App (Sidebar Layout) ──────────────────────────── -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<div id="mainApp" style="display:none" class="app-layout">
 
-  <!-- ── Header ────────────────────────────────────────────── -->
-  <header class="app-header">
-    <div class="header-brand">
-      <span class="brand-icon">📋</span>
+  <!-- ── Sidebar ── -->
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <div class="sidebar-logo">B</div>
       <div>
-        <div class="brand-name">Bulk Poster</div>
-        <div class="brand-sub">โพสต์ Card Link หลายเพจพร้อมกัน</div>
+        <div class="sidebar-name">Bulk Poster</div>
+        <div class="sidebar-sub" id="connBadge">● เชื่อมต่อแล้ว</div>
       </div>
     </div>
-    <div class="header-right">
-      <span id="connBadge" class="badge-conn">● เชื่อมต่อแล้ว</span>
+
+    <nav class="sidebar-nav">
+      <div class="nav-group-label">โหมดโพส</div>
+      <button class="nav-item active" data-mode="cardlink">
+        <span class="nav-icon">🔗</span>
+        <span>Card Link</span>
+      </button>
+      <button class="nav-item" data-mode="photos">
+        <span class="nav-icon">🖼️</span>
+        <span>โพสรูปภาพ</span>
+      </button>
+
+      <div class="nav-group-label" style="margin-top:24px">อื่นๆ</div>
+      <a class="nav-item" href="/dashboard" target="_blank">
+        <span class="nav-icon">📊</span>
+        <span>Dashboard</span>
+      </a>
+    </nav>
+
+    <!-- Pages Selection in Sidebar -->
+    <div class="sidebar-pages">
+      <div class="sidebar-pages-head">
+        <span>เพจ</span>
+        <span id="selCountLabel" class="sel-count"></span>
+      </div>
+      <div id="pagesList" class="sidebar-pages-list">
+        <div class="loading-row"><div class="spinner"></div> โหลดเพจ...</div>
+      </div>
+      <div class="sidebar-pages-actions">
+        <button id="btnAll" class="btn-link">เลือกทั้งหมด</button>
+        <span class="dot-sep">·</span>
+        <button id="btnNone" class="btn-link">ล้าง</button>
+        <span class="dot-sep">·</span>
+        <button id="btnReload" class="btn-link">โหลดใหม่</button>
+      </div>
     </div>
-  </header>
+  </aside>
 
-  <div class="app-body">
-
-    <!-- ── Mode Tabs ───────────────────────────────────────── -->
-    <div class="mode-tabs">
-      <button class="mode-tab active" data-mode="cardlink">🔗 Card Link</button>
-      <button class="mode-tab" data-mode="photos">🖼️ โพสรูปภาพ</button>
-    </div>
-
-    <!-- ── Section: เลือกเพจ ──────────────────────────────── -->
-    <section class="card">
-      <div class="section-head">
-        <span class="section-title">เลือกเพจ</span>
-        <span id="selCountLabel" class="sel-count-label"></span>
-      </div>
-      <div id="pagesList" class="pages-grid">
-        <div class="loading-row"><div class="spinner"></div> กำลังโหลดเพจ...</div>
-      </div>
-      <div class="pages-footer">
-        <button id="btnAll" class="btn btn-ghost btn-sm">เลือกทั้งหมด</button>
-        <button id="btnNone" class="btn btn-ghost btn-sm">ยกเลิกทั้งหมด</button>
-        <button id="btnReload" class="btn btn-ghost btn-sm">🔄 โหลดใหม่</button>
-      </div>
-    </section>
+  <!-- ── Main Content ── -->
+  <main class="main-content">
 
     <!-- ══════ Mode: Card Link ══════ -->
     <div id="modeCardlink" class="mode-content active">
 
-    <!-- ── Section: ตั้งค่า + รูปภาพ ─────────────────────── -->
-    <div class="two-col">
-
-      <section class="card">
-        <div class="section-title">ตั้งค่า</div>
-
-        <div class="field">
-          <label class="lbl">Ad Account</label>
-          <select id="adAccountSel" class="inp inp-select">
-            <option value="">กำลังโหลด...</option>
-          </select>
-        </div>
-
-        <div class="field">
-          <label class="lbl">⏱ ระยะห่างระหว่างเพจ</label>
-          <select id="delaySel" class="inp inp-select">
-            <option value="20000">20 วินาที</option>
-            <option value="30000" selected>30 วินาที (แนะนำ)</option>
-            <option value="60000">1 นาที</option>
-            <option value="300000">5 นาที</option>
-            <option value="600000">10 นาที</option>
-            <option value="1800000">30 นาที</option>
-            <option value="3600000">1 ชั่วโมง</option>
-          </select>
-        </div>
-
-        <div class="field">
-          <label class="lbl">⏰ ตั้งเวลาเริ่มโพส</label>
-          <label class="toggle-row">
-            <input type="checkbox" id="schedToggle" />
-            <span class="toggle-sw"></span>
-            <span class="toggle-txt">เปิดใช้ตั้งเวลา</span>
-          </label>
-          <div id="schedBlock" style="display:none; margin-top:10px;">
-            <input id="schedDT" type="datetime-local" class="inp" />
-          </div>
-        </div>
-      </section>
-
-      <section class="card">
-        <div class="section-title">รูปภาพ</div>
-        <div class="image-drop" id="imageDrop">
-          <img id="imagePreview" src="" alt="" style="display:none" />
-          <div id="imagePrompt" class="image-prompt">
-            <div>🖼️</div>
-            <div>วางรูปหรือคลิกเพื่ออัปโหลด</div>
-          </div>
-          <input type="file" id="imageFile" accept="image/*" style="display:none" />
-        </div>
-        <div id="ogPreviewWrap" style="display:none" class="og-preview">
-          <div id="ogSite" class="og-site"></div>
-          <div id="ogTitle" class="og-title"></div>
-          <div id="ogDesc" class="og-desc"></div>
-        </div>
-      </section>
-
-    </div>
-
-    <!-- ── Section: CARD LINK ──────────────────────────────── -->
-    <section class="card">
-      <div class="section-title">CARD LINK</div>
-      <div class="form-grid">
-
-        <div class="field">
-          <label class="lbl">Destination Link <span class="req">*</span></label>
-          <input id="destLink" type="url" class="inp" placeholder="https://..." />
-        </div>
-
-        <div class="field">
-          <label class="lbl">Card Title</label>
-          <input id="cardTitle" type="text" class="inp" placeholder="Click to view more products." />
-        </div>
-
-        <div class="field">
-          <label class="lbl">Description (ไม่ต้องใส่)</label>
-          <input id="cardDesc" type="text" class="inp" placeholder="คำอธิบาย" />
-        </div>
-
-        <div class="field">
-          <label class="lbl">Display Link</label>
-          <input id="displayLink" type="text" class="inp" placeholder="example.com" />
-        </div>
-
-        <div class="field">
-          <label class="lbl">CTA</label>
-          <select id="ctaSel" class="inp inp-select">
-            <option value="LEARN_MORE">Learn More</option>
-            <option value="SHOP_NOW">Shop Now</option>
-            <option value="SIGN_UP">Sign Up</option>
-            <option value="DOWNLOAD">Download</option>
-            <option value="CONTACT_US">Contact Us</option>
-            <option value="NO_BUTTON">ไม่มี CTA</option>
-          </select>
-        </div>
-
-        <div class="field field-full">
-          <label class="lbl">Post Message</label>
-          <textarea id="postMsg" class="inp inp-textarea" rows="4" placeholder="ข้อความโพสต์..."></textarea>
-        </div>
-
+      <div class="content-header">
+        <h1>Card Link</h1>
+        <p>สร้าง Card Link โพสไปหลายเพจพร้อมกัน</p>
       </div>
-    </section>
 
-    <!-- ── Post Button + Progress ──────────────────────────── -->
-    <section class="card post-section">
-      <button id="btnPost" class="btn btn-primary btn-post">
-        <span id="postIcon">🚀</span> <span id="postLabel">โพสต์ทันที</span>
-      </button>
+      <div class="grid-2">
+        <!-- Left: Card Link Form -->
+        <div class="stack">
+          <section class="card">
+            <div class="card-title">รายละเอียดโพส</div>
+            <div class="stack-sm">
+              <div class="field">
+                <label class="lbl">Destination Link <span class="req">*</span></label>
+                <input id="destLink" type="url" class="inp" placeholder="https://..." />
+              </div>
+              <div class="field">
+                <label class="lbl">Post Message</label>
+                <textarea id="postMsg" class="inp inp-textarea" rows="3" placeholder="ข้อความโพสต์..."></textarea>
+              </div>
+              <div class="grid-2-sm">
+                <div class="field">
+                  <label class="lbl">Card Title</label>
+                  <input id="cardTitle" type="text" class="inp" placeholder="Click to view more products." />
+                </div>
+                <div class="field">
+                  <label class="lbl">Display Link</label>
+                  <input id="displayLink" type="text" class="inp" placeholder="example.com" />
+                </div>
+              </div>
+              <div class="grid-2-sm">
+                <div class="field">
+                  <label class="lbl">Description</label>
+                  <input id="cardDesc" type="text" class="inp" placeholder="คำอธิบาย (ไม่ต้องใส่)" />
+                </div>
+                <div class="field">
+                  <label class="lbl">CTA Button</label>
+                  <select id="ctaSel" class="inp inp-select">
+                    <option value="LEARN_MORE">Learn More</option>
+                    <option value="SHOP_NOW">Shop Now</option>
+                    <option value="SIGN_UP">Sign Up</option>
+                    <option value="DOWNLOAD">Download</option>
+                    <option value="CONTACT_US">Contact Us</option>
+                    <option value="NO_BUTTON">ไม่มี CTA</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
 
-      <div id="progressWrap" style="display:none">
+        <!-- Right: Image + Settings -->
+        <div class="stack">
+          <section class="card">
+            <div class="card-title">รูปภาพ</div>
+            <div class="image-drop" id="imageDrop">
+              <img id="imagePreview" src="" alt="" style="display:none" />
+              <div id="imagePrompt" class="image-prompt">
+                <div>📷</div>
+                <div>วางรูปหรือคลิกเพื่ออัปโหลด</div>
+              </div>
+              <input type="file" id="imageFile" accept="image/*" style="display:none" />
+            </div>
+          </section>
+
+          <section class="card">
+            <div class="card-title">ตั้งค่าการโพส</div>
+            <div class="stack-sm">
+              <div class="field">
+                <label class="lbl">Ad Account</label>
+                <select id="adAccountSel" class="inp inp-select">
+                  <option value="">กำลังโหลด...</option>
+                </select>
+              </div>
+              <div class="field">
+                <label class="lbl">ระยะห่างระหว่างเพจ</label>
+                <select id="delaySel" class="inp inp-select">
+                  <option value="20000">20 วินาที</option>
+                  <option value="30000" selected>30 วินาที (แนะนำ)</option>
+                  <option value="60000">1 นาที</option>
+                  <option value="300000">5 นาที</option>
+                  <option value="600000">10 นาที</option>
+                  <option value="1800000">30 นาที</option>
+                  <option value="3600000">1 ชั่วโมง</option>
+                </select>
+              </div>
+              <div class="field">
+                <label class="toggle-row">
+                  <input type="checkbox" id="schedToggle" />
+                  <span class="toggle-sw"></span>
+                  <span class="toggle-txt">ตั้งเวลาโพส</span>
+                </label>
+                <div id="schedBlock" style="display:none; margin-top:8px;">
+                  <input id="schedDT" type="datetime-local" class="inp" />
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <!-- Action Bar -->
+      <section class="action-bar">
+        <button id="btnPost" class="btn btn-primary btn-post">
+          <span id="postIcon">🚀</span> <span id="postLabel">โพสต์ทันที</span>
+        </button>
+      </section>
+
+      <div id="progressWrap" style="display:none" class="card">
         <div class="progress-track"><div id="progressBar" class="progress-fill"></div></div>
         <div id="progressLabel" class="progress-label">กำลังโพสต์...</div>
         <div id="progressLog" class="progress-log"></div>
       </div>
-
       <div id="schedConfirm" style="display:none" class="sched-confirm"></div>
-    </section>
+
+      <!-- History / Scheduled -->
+      <section class="card">
+        <div class="tab-nav">
+          <button class="tab-btn active" data-tab="scheduled">📅 ตั้งเวลา <span id="schedBadge" class="badge-count" style="display:none">0</span></button>
+          <button class="tab-btn" data-tab="history">📊 ประวัติ</button>
+        </div>
+        <div id="tab-scheduled" class="tab-pane active">
+          <div id="schedList"><div class="empty-state">ยังไม่มีรายการตั้งเวลา</div></div>
+        </div>
+        <div id="tab-history" class="tab-pane">
+          <div class="pane-toolbar"><button id="btnClrHist" class="btn btn-ghost btn-sm" style="color:var(--danger)">ล้างประวัติ</button></div>
+          <div id="histList"><div class="empty-state">ยังไม่มีประวัติ</div></div>
+        </div>
+      </section>
 
     </div><!-- /modeCardlink -->
 
     <!-- ══════ Mode: Photos ══════ -->
     <div id="modePhotos" class="mode-content">
 
+      <div class="content-header">
+        <h1>โพสรูปภาพ</h1>
+        <p>อัพโหลดหลายรูป ใส่แคปชั่นแต่ละรูป ตั้งเวลาได้</p>
+      </div>
+
       <section class="card">
-        <div class="section-title">ตั้งค่า</div>
-        <div class="field">
-          <label class="lbl">⏱ ระยะห่างระหว่างโพส</label>
-          <select id="photoDelaySel" class="inp inp-select">
-            <option value="1800000" selected>30 นาที</option>
-            <option value="3600000">1 ชั่วโมง</option>
-            <option value="7200000">2 ชั่วโมง</option>
-            <option value="14400000">4 ชั่วโมง</option>
-          </select>
-        </div>
-        <div class="field">
-          <label class="lbl">⏰ ตั้งเวลาเริ่มโพส</label>
-          <label class="toggle-row">
-            <input type="checkbox" id="photoSchedToggle" />
-            <span class="toggle-sw"></span>
-            <span class="toggle-txt">เปิดใช้ตั้งเวลา</span>
-          </label>
-          <div id="photoSchedBlock" style="display:none; margin-top:10px;">
-            <input id="photoSchedDT" type="datetime-local" class="inp" />
+        <div class="card-title">ตั้งค่า</div>
+        <div class="inline-settings">
+          <div class="field">
+            <label class="lbl">ระยะห่างระหว่างโพส</label>
+            <select id="photoDelaySel" class="inp inp-select">
+              <option value="1800000" selected>30 นาที</option>
+              <option value="3600000">1 ชั่วโมง</option>
+              <option value="7200000">2 ชั่วโมง</option>
+              <option value="14400000">4 ชั่วโมง</option>
+            </select>
+          </div>
+          <div class="field">
+            <label class="toggle-row">
+              <input type="checkbox" id="photoSchedToggle" />
+              <span class="toggle-sw"></span>
+              <span class="toggle-txt">ตั้งเวลา</span>
+            </label>
+            <div id="photoSchedBlock" style="display:none; margin-top:8px;">
+              <input id="photoSchedDT" type="datetime-local" class="inp" />
+            </div>
           </div>
         </div>
       </section>
 
       <section class="card">
-        <div class="section-title">อัพโหลดรูปภาพ</div>
+        <div class="card-title">อัพโหลดรูปภาพ <span id="photoCount" class="photo-count" style="display:none"></span></div>
         <div class="photo-drop-zone" id="photoDropZone">
-          <div style="font-size:36px;margin-bottom:8px">🖼️</div>
-          <div>วางรูปหลายๆ ไฟล์ หรือคลิกเพื่อเลือก</div>
-          <div style="font-size:12px;margin-top:4px">รองรับ JPG, PNG, WEBP</div>
+          <div class="drop-icon">📷</div>
+          <div class="drop-title">วางรูปหลายๆ ไฟล์ หรือคลิกเพื่อเลือก</div>
+          <div class="drop-sub">รองรับ JPG, PNG, WEBP</div>
           <input type="file" id="photoFiles" accept="image/*" multiple style="display:none" />
         </div>
-        <div id="photoCount" class="photo-count" style="display:none"></div>
         <div id="photoGrid" class="photo-grid"></div>
       </section>
 
-      <section class="card post-section">
+      <section class="action-bar">
         <button id="btnPostPhotos" class="btn btn-primary btn-post">
           <span id="photoPostIcon">🚀</span> <span id="photoPostLabel">โพสรูปทั้งหมด</span>
         </button>
-        <div id="photoProgressWrap" style="display:none">
-          <div class="progress-track"><div id="photoProgressBar" class="progress-fill"></div></div>
-          <div id="photoProgressLabel" class="progress-label">กำลังโพสรูป...</div>
-          <div id="photoProgressLog" class="progress-log"></div>
-        </div>
       </section>
+
+      <div id="photoProgressWrap" style="display:none" class="card">
+        <div class="progress-track"><div id="photoProgressBar" class="progress-fill"></div></div>
+        <div id="photoProgressLabel" class="progress-label">กำลังโพสรูป...</div>
+        <div id="photoProgressLog" class="progress-log"></div>
+      </div>
 
     </div><!-- /modePhotos -->
 
-    <!-- ── Tabs: ตั้งเวลา / ประวัติ ───────────────────────── -->
-    <section class="card">
-      <div class="tab-nav">
-        <button class="tab-btn active" data-tab="scheduled">📅 รายการตั้งเวลา <span id="schedBadge" class="badge-count" style="display:none">0</span></button>
-        <button class="tab-btn" data-tab="history">📊 ประวัติ</button>
-      </div>
-      <div id="tab-scheduled" class="tab-pane active">
-        <div id="schedList"><div class="empty-state">📅 ยังไม่มีรายการตั้งเวลา</div></div>
-      </div>
-      <div id="tab-history" class="tab-pane">
-        <div class="pane-toolbar"><button id="btnClrHist" class="btn btn-ghost btn-sm" style="color:#ff6b6b">🗑 ล้างประวัติ</button></div>
-        <div id="histList"><div class="empty-state">📊 ยังไม่มีประวัติ</div></div>
-      </div>
-    </section>
+  </main>
+</div>
 
-  </div>
+<div id="ogPreviewWrap" style="display:none" class="og-preview">
+  <div id="ogSite" class="og-site"></div>
+  <div id="ogTitle" class="og-title"></div>
+  <div id="ogDesc" class="og-desc"></div>
 </div>
 
 <script src="app.js"></script>
