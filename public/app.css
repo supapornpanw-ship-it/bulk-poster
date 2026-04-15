@@ -492,6 +492,18 @@ input[type="datetime-local"].inp { color-scheme: dark; }
 }
 .toggle-txt { font-size: 13px; font-weight: 500; color: var(--text2); }
 
+.sched-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 10px 0 2px;
+}
+.sched-datetime {
+  flex: 1;
+  min-width: 180px;
+}
+
 /* ── OG Preview (legacy) ── */
 .og-preview {
   margin-top: 12px;

@@ -160,13 +160,13 @@
           <section class="card">
             <div class="card-title">ตั้งค่าการโพส</div>
             <div class="stack-sm">
-              <div class="field">
-                <label class="lbl">Ad Account</label>
-                <select id="adAccountSel" class="inp inp-select">
-                  <option value="">กำลังโหลด...</option>
-                </select>
-              </div>
               <div class="grid-2-sm">
+                <div class="field">
+                  <label class="lbl">Ad Account</label>
+                  <select id="adAccountSel" class="inp inp-select">
+                    <option value="">กำลังโหลด...</option>
+                  </select>
+                </div>
                 <div class="field">
                   <label class="lbl">ระยะห่างระหว่างเพจ</label>
                   <select id="delaySel" class="inp inp-select">
@@ -179,15 +179,15 @@
                     <option value="3600000">1 ชั่วโมง</option>
                   </select>
                 </div>
-                <div class="field">
-                  <label class="toggle-row">
-                    <input type="checkbox" id="schedToggle" />
-                    <span class="toggle-sw"></span>
-                    <span class="toggle-txt">ตั้งเวลาโพส</span>
-                  </label>
-                  <div id="schedBlock" style="display:none; margin-top:8px;">
-                    <input id="schedDT" type="datetime-local" class="inp" />
-                  </div>
+              </div>
+              <div class="sched-row">
+                <label class="toggle-row">
+                  <input type="checkbox" id="schedToggle" />
+                  <span class="toggle-sw"></span>
+                  <span class="toggle-txt">ตั้งเวลาโพส</span>
+                </label>
+                <div id="schedBlock" class="sched-datetime" style="display:none;">
+                  <input id="schedDT" type="datetime-local" class="inp" />
                 </div>
               </div>
             </div>
