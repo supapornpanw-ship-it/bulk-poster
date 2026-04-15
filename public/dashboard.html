@@ -4,364 +4,321 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Bulk Poster — Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --bg:       #0f1117;
-      --surface:  #1a1d2e;
-      --surface2: #222538;
-      --border:   #2e3250;
-      --primary:  #4f6ef7;
-      --primary-h:#3d5be0;
-      --success:  #22c55e;
-      --danger:   #ef4444;
-      --warn:     #f59e0b;
-      --text:     #e2e8f0;
-      --muted:    #8892b0;
-      --radius:   12px;
-      --radius-s: 8px;
+      --bg:        #0f1117;
+      --bg2:       #161821;
+      --surface:   #1c1e2a;
+      --surface2:  #232636;
+      --surface3:  #2a2e42;
+      --border:    rgba(255,255,255,.06);
+      --border-h:  rgba(255,255,255,.12);
+      --primary:   #6366f1;
+      --primary-h: #818cf8;
+      --primary-g: linear-gradient(135deg, #6366f1, #8b5cf6);
+      --primary-glow: rgba(99,102,241,.2);
+      --success:   #34d399;
+      --success-bg:rgba(52,211,153,.08);
+      --danger:    #f87171;
+      --danger-bg: rgba(248,113,113,.08);
+      --warn:      #fbbf24;
+      --warn-bg:   rgba(251,191,36,.08);
+      --text:      #f1f5f9;
+      --text2:     #94a3b8;
+      --muted:     #64748b;
+      --radius:    12px;
+      --radius-s:  8px;
+      --radius-xs: 6px;
+      --shadow:    0 1px 2px rgba(0,0,0,.2), 0 4px 16px rgba(0,0,0,.15);
+      --transition: .2s cubic-bezier(.4,0,.2,1);
     }
 
     body {
       background: var(--bg);
       color: var(--text);
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Tahoma, sans-serif;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       font-size: 14px;
-      line-height: 1.5;
+      line-height: 1.6;
       min-height: 100vh;
-      padding: 20px;
+      -webkit-font-smoothing: antialiased;
     }
 
-    .header {
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 32px 24px;
+    }
+
+    /* ── Header ── */
+    .dash-header {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      margin-bottom: 24px;
+      margin-bottom: 28px;
       flex-wrap: wrap;
       gap: 12px;
     }
-    .header h1 {
-      font-size: 22px;
-      font-weight: 700;
-    }
-    .header-actions {
+    .dash-header-left {
       display: flex;
-      gap: 10px;
       align-items: center;
+      gap: 14px;
     }
-
+    .dash-logo {
+      width: 40px; height: 40px;
+      border-radius: 10px;
+      background: var(--primary-g);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; font-weight: 800; color: #fff;
+      box-shadow: 0 2px 8px var(--primary-glow);
+      text-decoration: none;
+    }
+    .dash-title { font-size: 20px; font-weight: 700; letter-spacing: -.3px; }
+    .dash-sub { font-size: 12px; color: var(--muted); margin-top: 1px; }
+    .dash-actions {
+      display: flex; align-items: center; gap: 8px;
+    }
     .btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 8px 16px;
-      border: none;
-      border-radius: var(--radius-s);
-      font-size: 13px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: background .15s;
+      display: inline-flex; align-items: center; justify-content: center;
+      gap: 6px; padding: 8px 16px; border: none; border-radius: var(--radius-s);
+      font-size: 13px; font-weight: 600; cursor: pointer;
+      transition: all var(--transition); text-decoration: none;
+      font-family: inherit; white-space: nowrap;
     }
-    .btn-primary { background: var(--primary); color: #fff; }
-    .btn-primary:hover { background: var(--primary-h); }
-    .btn-ghost {
-      background: transparent;
-      color: var(--muted);
-      border: 1px solid var(--border);
-    }
-    .btn-ghost:hover { background: var(--surface2); color: var(--text); }
+    .btn:disabled { opacity: .35; cursor: not-allowed; }
+    .btn-primary { background: var(--primary-g); color: #fff; box-shadow: 0 2px 8px var(--primary-glow); }
+    .btn-primary:hover:not(:disabled) { box-shadow: 0 4px 16px rgba(99,102,241,.3); transform: translateY(-1px); }
+    .btn-ghost { background: var(--surface2); color: var(--text2); border: 1px solid var(--border); }
+    .btn-ghost:hover:not(:disabled) { background: var(--surface3); color: var(--text); border-color: var(--border-h); }
+    .btn-danger { background: var(--danger); color: #fff; }
+    .btn-danger:hover:not(:disabled) { background: #ef5350; }
+    .btn-sm { padding: 6px 12px; font-size: 12px; }
+    .refresh-time { font-size: 11px; color: var(--muted); }
 
-    .stats-row {
+    /* ── Stats ── */
+    .stats-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      grid-template-columns: repeat(4, 1fr);
       gap: 12px;
       margin-bottom: 24px;
     }
     .stat-card {
       background: var(--surface);
       border: 1px solid var(--border);
-      border-radius: var(--radius-s);
-      padding: 16px;
+      border-radius: var(--radius);
+      padding: 18px 16px;
       text-align: center;
+      box-shadow: var(--shadow);
     }
-    .stat-num {
-      font-size: 28px;
-      font-weight: 700;
-      line-height: 1;
-    }
-    .stat-label {
-      color: var(--muted);
-      font-size: 12px;
-      margin-top: 4px;
-    }
+    .stat-num { font-size: 28px; font-weight: 800; line-height: 1; letter-spacing: -.5px; }
+    .stat-label { color: var(--muted); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; margin-top: 6px; }
+    .stat-total .stat-num { color: var(--text); }
     .stat-pending .stat-num { color: var(--warn); }
     .stat-done .stat-num { color: var(--success); }
     .stat-error .stat-num { color: var(--danger); }
 
-    .loading {
+    /* ── Loading / Empty ── */
+    .loading, .empty {
       text-align: center;
       padding: 60px 20px;
       color: var(--muted);
-      font-size: 16px;
     }
     .loading .spinner {
       display: inline-block;
-      width: 28px;
-      height: 28px;
-      border: 3px solid var(--border);
+      width: 24px; height: 24px;
+      border: 2px solid var(--surface3);
       border-top-color: var(--primary);
       border-radius: 50%;
       animation: spin .7s linear infinite;
       margin-bottom: 12px;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
+    .empty-icon { font-size: 40px; margin-bottom: 10px; }
 
-    .empty {
-      text-align: center;
-      padding: 60px 20px;
-      color: var(--muted);
-    }
-    .empty .icon { font-size: 48px; margin-bottom: 12px; }
-
-    /* ── Job Card ── */
+    /* ── Job Cards ── */
+    .job-list { display: flex; flex-direction: column; gap: 10px; }
     .job-card {
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: var(--radius);
-      margin-bottom: 16px;
       overflow: hidden;
+      box-shadow: var(--shadow);
+      transition: border-color var(--transition);
     }
+    .job-card:hover { border-color: var(--border-h); }
+
     .job-header {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 16px 20px;
+      padding: 14px 18px;
       cursor: pointer;
       gap: 12px;
-      flex-wrap: wrap;
+      transition: background var(--transition);
     }
-    .job-header:hover { background: var(--surface2); }
+    .job-header:hover { background: rgba(255,255,255,.02); }
 
-    .job-left {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      min-width: 0;
-      flex: 1;
-    }
-
+    .job-left { display: flex; align-items: center; gap: 12px; min-width: 0; flex: 1; }
     .job-thumb {
-      width: 48px;
-      height: 48px;
-      border-radius: 6px;
+      width: 44px; height: 44px;
+      border-radius: 8px;
       object-fit: cover;
       flex-shrink: 0;
       background: var(--surface2);
     }
+    .job-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+    .job-time { font-weight: 600; font-size: 14px; }
+    .job-id { color: var(--muted); font-size: 10px; font-family: 'SF Mono', Monaco, monospace; overflow: hidden; text-overflow: ellipsis; }
 
     .status-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 5px;
-      padding: 4px 10px;
-      border-radius: 20px;
-      font-size: 12px;
-      font-weight: 600;
-      white-space: nowrap;
-      flex-shrink: 0;
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 3px 10px; border-radius: 20px;
+      font-size: 11px; font-weight: 600; white-space: nowrap; flex-shrink: 0;
     }
-    .status-pending { background: rgba(245,158,11,.15); color: var(--warn); }
-    .status-done    { background: rgba(34,197,94,.15); color: var(--success); }
-    .status-cancelled { background: rgba(142,142,176,.15); color: var(--muted); }
+    .status-pending { background: var(--warn-bg); color: var(--warn); border: 1px solid rgba(251,191,36,.12); }
+    .status-done    { background: var(--success-bg); color: var(--success); border: 1px solid rgba(52,211,153,.12); }
+    .status-error   { background: var(--danger-bg); color: var(--danger); border: 1px solid rgba(248,113,113,.12); }
+    .status-cancelled { background: rgba(100,116,139,.08); color: var(--muted); border: 1px solid rgba(100,116,139,.1); }
 
-    .job-meta {
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-      min-width: 0;
-    }
-    .job-time {
-      font-weight: 600;
-      font-size: 15px;
-      white-space: nowrap;
-    }
-    .job-id {
-      color: var(--muted);
-      font-size: 11px;
-      font-family: monospace;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    .job-right {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      flex-shrink: 0;
-    }
-    .page-count {
-      color: var(--muted);
-      font-size: 13px;
-    }
+    .job-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+    .page-count { color: var(--muted); font-size: 12px; font-weight: 500; }
     .chevron {
-      color: var(--muted);
-      transition: transform .2s;
-      font-size: 18px;
+      color: var(--muted); transition: transform .2s; font-size: 16px;
+      display: flex; align-items: center;
     }
     .job-card.open .chevron { transform: rotate(180deg); }
 
-    /* ── Detail (collapsed by default) ── */
-    .job-detail {
-      max-height: 0;
-      overflow: hidden;
-      transition: max-height .3s ease;
-    }
-    .job-card.open .job-detail {
-      max-height: 2000px;
-    }
-    .job-detail-inner {
-      padding: 0 20px 20px;
-      border-top: 1px solid var(--border);
-    }
+    /* ── Detail ── */
+    .job-detail { max-height: 0; overflow: hidden; transition: max-height .3s ease; }
+    .job-card.open .job-detail { max-height: 2000px; }
+    .job-detail-inner { padding: 0 18px 18px; border-top: 1px solid var(--border); }
 
-    .detail-section {
-      margin-top: 14px;
-    }
-    .detail-section-title {
-      font-size: 12px;
-      color: var(--muted);
-      text-transform: uppercase;
-      letter-spacing: .5px;
-      margin-bottom: 8px;
+    .detail-section { margin-top: 14px; }
+    .detail-label {
+      font-size: 10px; font-weight: 700; color: var(--muted);
+      text-transform: uppercase; letter-spacing: .06em; margin-bottom: 8px;
     }
 
     .post-preview {
-      background: var(--surface2);
+      background: var(--bg2);
+      border: 1px solid var(--border);
       border-radius: var(--radius-s);
       padding: 14px;
       font-size: 13px;
     }
-    .post-preview .msg {
-      margin-bottom: 8px;
-      white-space: pre-wrap;
-      word-break: break-word;
-    }
-    .post-preview .link-row {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      color: var(--primary);
-      font-size: 12px;
-      word-break: break-all;
-    }
-    .post-preview .card-info {
-      margin-top: 6px;
-      font-size: 12px;
-      color: var(--muted);
-    }
+    .post-preview .msg { margin-bottom: 8px; white-space: pre-wrap; word-break: break-word; line-height: 1.5; }
+    .post-preview .link-row { display: flex; align-items: center; gap: 6px; color: var(--primary-h); font-size: 12px; word-break: break-all; }
+    .post-preview .card-info { margin-top: 4px; font-size: 12px; color: var(--text2); }
+    .post-preview .card-info b { color: var(--muted); font-weight: 600; }
 
-    /* ── Page Result Row ── */
     .page-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 10px 14px;
-      background: var(--surface2);
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 8px 12px;
+      background: var(--bg2);
+      border: 1px solid var(--border);
       border-radius: var(--radius-s);
-      margin-bottom: 6px;
-      gap: 10px;
-      flex-wrap: wrap;
+      margin-bottom: 4px; gap: 10px;
     }
-    .page-name {
-      font-weight: 600;
-      font-size: 13px;
-      min-width: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .page-status {
-      font-size: 12px;
-      font-weight: 600;
-      white-space: nowrap;
-    }
+    .page-name { font-weight: 500; font-size: 13px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .page-status { font-size: 11px; font-weight: 600; white-space: nowrap; }
     .page-status.ok { color: var(--success); }
     .page-status.fail { color: var(--danger); }
     .page-status.wait { color: var(--warn); }
 
-    .auto-refresh {
-      color: var(--muted);
+    .meta-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px 16px;
       font-size: 12px;
+      color: var(--text2);
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-s);
+      padding: 12px 14px;
     }
-    .btn-danger { background: var(--danger); color: #fff; }
-    .btn-danger:hover { background: #dc2626; }
-    .btn-danger:disabled { opacity: .5; cursor: not-allowed; }
+    .meta-grid .meta-label { color: var(--muted); font-weight: 600; font-size: 11px; }
 
-    @media (max-width: 500px) {
-      body { padding: 12px; }
-      .header h1 { font-size: 18px; }
+    /* ── Scrollbar ── */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--surface3); border-radius: 3px; }
+
+    @media (max-width: 600px) {
+      .container { padding: 16px 12px; }
+      .stats-grid { grid-template-columns: repeat(2, 1fr); }
+      .dash-title { font-size: 17px; }
       .job-header { padding: 12px 14px; }
       .job-detail-inner { padding: 0 14px 14px; }
-      .stat-num { font-size: 22px; }
+      .meta-grid { grid-template-columns: 1fr; }
     }
   </style>
 </head>
 <body>
 
-<div class="header">
-  <h1>Bulk Poster Dashboard</h1>
-  <div class="header-actions">
-    <span class="auto-refresh" id="lastUpdate"></span>
-    <button class="btn btn-ghost" onclick="loadJobs()">Refresh</button>
-    <a href="/" class="btn btn-primary">โพสต์ใหม่</a>
-  </div>
-</div>
+<div class="container">
 
-<div class="stats-row" id="statsRow" style="display:none">
-  <div class="stat-card stat-all">
-    <div class="stat-num" id="statTotal">0</div>
-    <div class="stat-label">ทั้งหมด</div>
+  <div class="dash-header">
+    <div class="dash-header-left">
+      <a href="/" class="dash-logo">B</a>
+      <div>
+        <div class="dash-title">Dashboard</div>
+        <div class="dash-sub">Bulk Poster — Scheduled Jobs</div>
+      </div>
+    </div>
+    <div class="dash-actions">
+      <span class="refresh-time" id="lastUpdate"></span>
+      <button class="btn btn-ghost btn-sm" id="btnRefresh">Refresh</button>
+      <a href="/" class="btn btn-primary btn-sm">โพสต์ใหม่</a>
+    </div>
   </div>
-  <div class="stat-card stat-pending">
-    <div class="stat-num" id="statPending">0</div>
-    <div class="stat-label">รอ publish</div>
-  </div>
-  <div class="stat-card stat-done">
-    <div class="stat-num" id="statDone">0</div>
-    <div class="stat-label">สำเร็จ</div>
-  </div>
-  <div class="stat-card stat-error">
-    <div class="stat-num" id="statError">0</div>
-    <div class="stat-label">มีปัญหา</div>
-  </div>
-</div>
 
-<div id="content">
-  <div class="loading">
-    <div class="spinner"></div>
-    <div>กำลังโหลด...</div>
+  <div class="stats-grid" id="statsRow" style="display:none">
+    <div class="stat-card stat-total">
+      <div class="stat-num" id="statTotal">0</div>
+      <div class="stat-label">ทั้งหมด</div>
+    </div>
+    <div class="stat-card stat-pending">
+      <div class="stat-num" id="statPending">0</div>
+      <div class="stat-label">รอ Publish</div>
+    </div>
+    <div class="stat-card stat-done">
+      <div class="stat-num" id="statDone">0</div>
+      <div class="stat-label">สำเร็จ</div>
+    </div>
+    <div class="stat-card stat-error">
+      <div class="stat-num" id="statError">0</div>
+      <div class="stat-label">มีปัญหา</div>
+    </div>
   </div>
+
+  <div id="content">
+    <div class="loading">
+      <div class="spinner"></div>
+      <div>กำลังโหลด...</div>
+    </div>
+  </div>
+
 </div>
 
 <script>
 const API = '/api/jobs';
 let allJobs = [];
 
+document.getElementById('btnRefresh').addEventListener('click', loadJobs);
+
 function fmtDate(ts) {
   if (!ts) return '-';
   const d = new Date(ts);
   const now = new Date();
   const pad = n => String(n).padStart(2, '0');
-
   const time = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
   const day = `${pad(d.getDate())}/${pad(d.getMonth() + 1)}`;
-
-  // ถ้าเป็นวันนี้ แสดงแค่เวลา
   if (d.toDateString() === now.toDateString()) return `วันนี้ ${time}`;
-  // ถ้าเป็นพรุ่งนี้
   const tmr = new Date(now); tmr.setDate(tmr.getDate() + 1);
   if (d.toDateString() === tmr.toDateString()) return `พรุ่งนี้ ${time}`;
-
   return `${day} ${time}`;
 }
 
@@ -375,14 +332,11 @@ function fmtFull(ts) {
 function statusBadge(job) {
   const s = job.status || 'pending';
   if (s === 'done') {
-    // เช็คว่ามี error ไหม
-    const results = job.results || {};
-    const hasError = Object.values(results).some(r => !r.success);
-    if (hasError) return `<span class="status-badge status-done">Done (มี error)</span>`;
-    return `<span class="status-badge status-done">Done</span>`;
+    const hasError = Object.values(job.results || {}).some(r => !r.success);
+    if (hasError) return `<span class="status-badge status-error">Done (มี error)</span>`;
+    return `<span class="status-badge status-done">สำเร็จ</span>`;
   }
-  if (s === 'cancelled') return `<span class="status-badge status-cancelled">Cancelled</span>`;
-  // pending — เช็คว่าเลยเวลาแล้วหรือยัง
+  if (s === 'cancelled') return `<span class="status-badge status-cancelled">ยกเลิก</span>`;
   const now = Date.now();
   if (job.scheduledTime && job.scheduledTime < now) {
     return `<span class="status-badge status-pending">รอ publish...</span>`;
@@ -397,6 +351,16 @@ function pageStatusHtml(page, results) {
   return `<span class="page-status fail" title="${r.error || ''}">${r.error ? r.error.substring(0, 40) : 'ผิดพลาด'}</span>`;
 }
 
+function escHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function toggleJob(el) {
+  el.closest('.job-card').classList.toggle('open');
+}
+
 function renderJobs(jobs) {
   const $content = document.getElementById('content');
   const $stats = document.getElementById('statsRow');
@@ -405,19 +369,20 @@ function renderJobs(jobs) {
     $stats.style.display = 'none';
     $content.innerHTML = `
       <div class="empty">
-        <div class="icon">📋</div>
+        <div class="empty-icon">📋</div>
         <div>ยังไม่มี job ที่ตั้งเวลาไว้</div>
       </div>`;
     return;
   }
 
-  // Stats
   $stats.style.display = '';
   let pending = 0, done = 0, errCount = 0;
   jobs.forEach(j => {
     if (j.status === 'done') {
       const hasErr = Object.values(j.results || {}).some(r => !r.success);
       if (hasErr) errCount++; else done++;
+    } else if (j.status === 'cancelled') {
+      // don't count
     } else {
       pending++;
     }
@@ -427,7 +392,6 @@ function renderJobs(jobs) {
   document.getElementById('statDone').textContent = done;
   document.getElementById('statError').textContent = errCount;
 
-  // Sort: pending first (newest scheduled), then done
   jobs.sort((a, b) => {
     if (a.status !== b.status) {
       if (a.status === 'pending') return -1;
@@ -436,7 +400,7 @@ function renderJobs(jobs) {
     return (b.scheduledTime || 0) - (a.scheduledTime || 0);
   });
 
-  let html = '';
+  let html = '<div class="job-list">';
   jobs.forEach(job => {
     const pages = job.pages || [];
     const results = job.results || {};
@@ -449,7 +413,7 @@ function renderJobs(jobs) {
         <div class="job-left">
           ${pd.thumbnail ? `<img class="job-thumb" src="${pd.thumbnail}" alt="">` : ''}
           ${statusBadge(job)}
-          <div class="job-meta">
+          <div class="job-info">
             <div class="job-time">${fmtDate(job.scheduledTime)}</div>
             <div class="job-id">${job.jobId}</div>
           </div>
@@ -464,7 +428,7 @@ function renderJobs(jobs) {
 
           ${pd.message || pd.link ? `
           <div class="detail-section">
-            <div class="detail-section-title">เนื้อหาโพส</div>
+            <div class="detail-label">เนื้อหาโพส</div>
             <div class="post-preview">
               ${pd.message ? `<div class="msg">${escHtml(pd.message)}</div>` : ''}
               ${pd.link ? `<div class="link-row">🔗 ${escHtml(pd.link)}</div>` : ''}
@@ -475,7 +439,7 @@ function renderJobs(jobs) {
           </div>` : ''}
 
           <div class="detail-section">
-            <div class="detail-section-title">สถานะแต่ละเพจ</div>
+            <div class="detail-label">สถานะแต่ละเพจ</div>
             ${pages.map(p => `
               <div class="page-row">
                 <span class="page-name">${escHtml(p.name || p.id)}</span>
@@ -485,51 +449,47 @@ function renderJobs(jobs) {
           </div>
 
           <div class="detail-section">
-            <div class="detail-section-title">ข้อมูลเพิ่มเติม</div>
-            <div class="post-preview" style="font-size:12px;color:var(--muted)">
-              <div>สร้างเมื่อ: ${fmtFull(job.createdAt)}</div>
-              <div>ตั้งเวลา: ${fmtFull(job.scheduledTime)}</div>
-              ${job.executedAt ? `<div>Publish เสร็จ: ${fmtFull(job.executedAt)}</div>` : ''}
-              ${job.delay ? `<div>ดีเลย์ระหว่างเพจ: ${job.delay / 1000} วินาที</div>` : ''}
+            <div class="detail-label">ข้อมูลเพิ่มเติม</div>
+            <div class="meta-grid">
+              <div><span class="meta-label">สร้างเมื่อ</span><br>${fmtFull(job.createdAt)}</div>
+              <div><span class="meta-label">ตั้งเวลา</span><br>${fmtFull(job.scheduledTime)}</div>
+              ${job.executedAt ? `<div><span class="meta-label">Publish เสร็จ</span><br>${fmtFull(job.executedAt)}</div>` : ''}
+              ${job.delay ? `<div><span class="meta-label">ดีเลย์</span><br>${job.delay / 1000} วินาที</div>` : ''}
             </div>
           </div>
 
           ${job.status === 'pending' ? `
-          <div class="detail-section" style="margin-top:16px">
-            <button class="btn btn-danger" onclick="cancelJob('${job.jobId}', this)">ยกเลิก Job นี้</button>
+          <div class="detail-section" style="margin-top:16px; display:flex; justify-content:flex-end;">
+            <button class="btn btn-danger btn-sm" onclick="cancelJob('${job.jobId}', this)">ยกเลิก Job</button>
           </div>` : ''}
 
         </div>
       </div>
     </div>`;
   });
-
+  html += '</div>';
   $content.innerHTML = html;
 }
 
-function escHtml(s) {
-  const d = document.createElement('div');
-  d.textContent = s;
-  return d.innerHTML;
-}
-
-function toggleJob(el) {
-  el.closest('.job-card').classList.toggle('open');
-}
-
 async function loadJobs() {
+  const btn = document.getElementById('btnRefresh');
+  btn.disabled = true;
+  btn.textContent = '...';
   try {
     const resp = await fetch(API);
     const data = await resp.json();
     allJobs = data.jobs || [];
     renderJobs(allJobs);
-    document.getElementById('lastUpdate').textContent = 'อัพเดท ' + new Date().toLocaleTimeString('th-TH');
+    document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString('th-TH');
   } catch (err) {
     document.getElementById('content').innerHTML = `
       <div class="empty">
-        <div class="icon">⚠️</div>
+        <div class="empty-icon">⚠️</div>
         <div>โหลดข้อมูลไม่ได้: ${err.message}</div>
       </div>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Refresh';
   }
 }
 
@@ -549,16 +509,15 @@ async function cancelJob(jobId, btnEl) {
     } else {
       alert('ยกเลิกไม่สำเร็จ: ' + (data.error || 'unknown'));
       btnEl.disabled = false;
-      btnEl.textContent = 'ยกเลิก Job นี้';
+      btnEl.textContent = 'ยกเลิก Job';
     }
   } catch (err) {
     alert('Error: ' + err.message);
     btnEl.disabled = false;
-    btnEl.textContent = 'ยกเลิก Job นี้';
+    btnEl.textContent = 'ยกเลิก Job';
   }
 }
 
-// โหลดทันที + auto refresh ทุก 30 วินาที
 loadJobs();
 setInterval(loadJobs, 30000);
 </script>
