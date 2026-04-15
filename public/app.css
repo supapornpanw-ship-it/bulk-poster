@@ -507,11 +507,14 @@ input[type="datetime-local"].inp { color-scheme: dark; }
 /* ══════════════════════════════════════════════════════════════ */
 /* ── Facebook Post Preview ───────────────────────────────── */
 /* ══════════════════════════════════════════════════════════════ */
+.fb-preview-card-wrap {
+  position: sticky;
+  top: 20px;
+}
 .fb-preview {
   background: #242526;
   border-radius: 10px;
   overflow: hidden;
-  max-width: 520px;
   font-family: Helvetica, Arial, sans-serif;
 }
 .fb-preview-header {
