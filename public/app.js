@@ -209,10 +209,9 @@ document.getElementById('destLink').addEventListener('blur', async function () {
     document.getElementById('ogDesc').textContent  = og.description || '';
     document.getElementById('ogPreviewWrap').style.display = '';
     if (og.image) {
-      const img = document.getElementById('imagePreview');
-      img.src = og.image;
-      img.style.display = '';
-      document.getElementById('imagePrompt').style.display = 'none';
+      document.getElementById('imagePreview').src = og.image;
+      currentImageData = og.image;
+      document.getElementById('fbPreviewImg').innerHTML = '<img src="' + og.image + '" alt="preview" />';
     }
   } catch {}
 });
@@ -249,8 +248,7 @@ imageFile.addEventListener('change', (e) => {
     currentImageData = ev.target.result;
     currentThumbnail = await makeThumbnail(ev.target.result);
     document.getElementById('imagePreview').src = ev.target.result;
-    document.getElementById('imagePreview').style.display = '';
-    // Update FB preview image directly
+    // Update FB preview image only (imagePreview stays hidden)
     fbPreviewImg.innerHTML = '<img src="' + ev.target.result + '" alt="preview" />';
   };
   reader.readAsDataURL(file);
