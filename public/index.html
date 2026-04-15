@@ -72,6 +72,12 @@
 
   <div class="app-body">
 
+    <!-- ── Mode Tabs ───────────────────────────────────────── -->
+    <div class="mode-tabs">
+      <button class="mode-tab active" data-mode="cardlink">🔗 Card Link</button>
+      <button class="mode-tab" data-mode="photos">🖼️ โพสรูปภาพ</button>
+    </div>
+
     <!-- ── Section: เลือกเพจ ──────────────────────────────── -->
     <section class="card">
       <div class="section-head">
@@ -87,6 +93,9 @@
         <button id="btnReload" class="btn btn-ghost btn-sm">🔄 โหลดใหม่</button>
       </div>
     </section>
+
+    <!-- ══════ Mode: Card Link ══════ -->
+    <div id="modeCardlink" class="mode-content active">
 
     <!-- ── Section: ตั้งค่า + รูปภาพ ─────────────────────── -->
     <div class="two-col">
@@ -205,6 +214,60 @@
 
       <div id="schedConfirm" style="display:none" class="sched-confirm"></div>
     </section>
+
+    </div><!-- /modeCardlink -->
+
+    <!-- ══════ Mode: Photos ══════ -->
+    <div id="modePhotos" class="mode-content">
+
+      <section class="card">
+        <div class="section-title">ตั้งค่า</div>
+        <div class="field">
+          <label class="lbl">⏱ ระยะห่างระหว่างโพส</label>
+          <select id="photoDelaySel" class="inp inp-select">
+            <option value="10000">10 วินาที</option>
+            <option value="20000" selected>20 วินาที</option>
+            <option value="30000">30 วินาที</option>
+            <option value="60000">1 นาที</option>
+          </select>
+        </div>
+        <div class="field">
+          <label class="lbl">⏰ ตั้งเวลาเริ่มโพส</label>
+          <label class="toggle-row">
+            <input type="checkbox" id="photoSchedToggle" />
+            <span class="toggle-sw"></span>
+            <span class="toggle-txt">เปิดใช้ตั้งเวลา</span>
+          </label>
+          <div id="photoSchedBlock" style="display:none; margin-top:10px;">
+            <input id="photoSchedDT" type="datetime-local" class="inp" />
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="section-title">อัพโหลดรูปภาพ</div>
+        <div class="photo-drop-zone" id="photoDropZone">
+          <div style="font-size:36px;margin-bottom:8px">🖼️</div>
+          <div>วางรูปหลายๆ ไฟล์ หรือคลิกเพื่อเลือก</div>
+          <div style="font-size:12px;margin-top:4px">รองรับ JPG, PNG, WEBP</div>
+          <input type="file" id="photoFiles" accept="image/*" multiple style="display:none" />
+        </div>
+        <div id="photoCount" class="photo-count" style="display:none"></div>
+        <div id="photoGrid" class="photo-grid"></div>
+      </section>
+
+      <section class="card post-section">
+        <button id="btnPostPhotos" class="btn btn-primary btn-post">
+          <span id="photoPostIcon">🚀</span> <span id="photoPostLabel">โพสรูปทั้งหมด</span>
+        </button>
+        <div id="photoProgressWrap" style="display:none">
+          <div class="progress-track"><div id="photoProgressBar" class="progress-fill"></div></div>
+          <div id="photoProgressLabel" class="progress-label">กำลังโพสรูป...</div>
+          <div id="photoProgressLog" class="progress-log"></div>
+        </div>
+      </section>
+
+    </div><!-- /modePhotos -->
 
     <!-- ── Tabs: ตั้งเวลา / ประวัติ ───────────────────────── -->
     <section class="card">

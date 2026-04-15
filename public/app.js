@@ -740,3 +740,150 @@ function fmtDate(ts) {
   return new Date(ts).toLocaleString('th-TH', { day: '2-digit', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit' });
 }
 function trunc(s, n) { return s && s.length > n ? s.slice(0, n) + '…' : (s || ''); }
+
+// ═══════════════════════════════════════════════════════════════
+// ─── Mode Tab Switching ──────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════
+document.querySelectorAll('.mode-tab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.mode-tab').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.mode-content').forEach(c => c.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('mode' + btn.dataset.mode.charAt(0).toUpperCase() + btn.dataset.mode.slice(1)).classList.add('active');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
+// ─── Photo Mode ──────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════
+const photoItems = []; // { id, dataUrl, caption }
+
+const photoDropZone = document.getElementById('photoDropZone');
+const photoFilesInput = document.getElementById('photoFiles');
+const photoGrid = document.getElementById('photoGrid');
+const photoCountEl = document.getElementById('photoCount');
+
+photoDropZone.addEventListener('click', () => photoFilesInput.click());
+photoDropZone.addEventListener('dragover', e => { e.preventDefault(); photoDropZone.classList.add('dragover'); });
+photoDropZone.addEventListener('dragleave', () => photoDropZone.classList.remove('dragover'));
+photoDropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  photoDropZone.classList.remove('dragover');
+  addPhotoFiles(e.dataTransfer.files);
+});
+photoFilesInput.addEventListener('change', e => {
+  addPhotoFiles(e.target.files);
+  photoFilesInput.value = '';
+});
+
+function addPhotoFiles(files) {
+  for (const file of files) {
+    if (!file.type.startsWith('image/')) continue;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const item = { id: 'ph_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6), dataUrl: ev.target.result, caption: '' };
+      photoItems.push(item);
+      renderPhotoGrid();
+    };
+    reader.readAsDataURL(file);
+  }
+}
+
+function renderPhotoGrid() {
+  photoCountEl.style.display = photoItems.length ? '' : 'none';
+  photoCountEl.textContent = `${photoItems.length} รูป`;
+
+  photoGrid.innerHTML = photoItems.map((item, idx) => `
+    <div class="photo-item" data-id="${item.id}">
+      <img src="${item.dataUrl}" alt="รูป ${idx + 1}" />
+      <button class="photo-remove" onclick="removePhoto('${item.id}')">&times;</button>
+      <textarea placeholder="แคปชั่นรูปที่ ${idx + 1}..." oninput="updatePhotoCaption('${item.id}', this.value)">${item.caption}</textarea>
+    </div>
+  `).join('');
+}
+
+window.removePhoto = function(id) {
+  const idx = photoItems.findIndex(p => p.id === id);
+  if (idx >= 0) photoItems.splice(idx, 1);
+  renderPhotoGrid();
+};
+
+window.updatePhotoCaption = function(id, val) {
+  const item = photoItems.find(p => p.id === id);
+  if (item) item.caption = val;
+};
+
+// ─── Photo Schedule Toggle ───────────────────────────────────
+document.getElementById('photoSchedToggle').addEventListener('change', function () {
+  document.getElementById('photoSchedBlock').style.display = this.checked ? '' : 'none';
+  document.getElementById('photoPostIcon').textContent = this.checked ? '⏰' : '🚀';
+  document.getElementById('photoPostLabel').textContent = this.checked ? 'ตั้งเวลาโพสรูป' : 'โพสรูปทั้งหมด';
+  if (this.checked) {
+    const dt = new Date(Date.now() + 3600000);
+    document.getElementById('photoSchedDT').value =
+      new Date(dt - dt.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  }
+});
+
+// ─── Post Photos ─────────────────────────────────────────────
+document.getElementById('btnPostPhotos').addEventListener('click', async () => {
+  if (!photoItems.length) return alert('กรุณาอัพโหลดรูปอย่างน้อย 1 รูป');
+  if (!selectedIds.size) return alert('กรุณาเลือกเพจอย่างน้อย 1 เพจ');
+
+  const selPages = pages.filter(p => selectedIds.has(p.id));
+  const delay = parseInt(document.getElementById('photoDelaySel').value) || 20000;
+  const isSchedule = document.getElementById('photoSchedToggle').checked;
+  let scheduledTime = null;
+
+  if (isSchedule) {
+    const dtVal = document.getElementById('photoSchedDT').value;
+    if (!dtVal) return alert('กรุณาเลือกวันและเวลา');
+    scheduledTime = Math.floor(new Date(dtVal).getTime() / 1000);
+    if (scheduledTime <= Math.floor(Date.now() / 1000) + 600) return alert('กรุณาเลือกเวลาอย่างน้อย 10 นาทีข้างหน้า');
+  }
+
+  const btn = document.getElementById('btnPostPhotos');
+  const progWrap = document.getElementById('photoProgressWrap');
+  const bar = document.getElementById('photoProgressBar');
+  const label = document.getElementById('photoProgressLabel');
+  const log = document.getElementById('photoProgressLog');
+
+  btn.disabled = true;
+  progWrap.style.display = '';
+  log.innerHTML = '';
+  isPosting = true;
+
+  const total = photoItems.length * selPages.length;
+  let done = 0;
+
+  for (let pi = 0; pi < photoItems.length; pi++) {
+    const photo = photoItems[pi];
+    for (let si = 0; si < selPages.length; si++) {
+      const page = selPages[si];
+      const pct = Math.round((done / total) * 100);
+      bar.style.width = pct + '%';
+      label.textContent = `รูป ${pi + 1}/${photoItems.length} → ${page.name} (${done}/${total})`;
+
+      try {
+        const result = await sendExt({
+          type: 'POST_PHOTO',
+          page,
+          imageData: photo.dataUrl,
+          caption: photo.caption,
+          scheduledTime,
+        });
+        log.innerHTML += `<div style="color:var(--success)">✓ รูป ${pi + 1} → ${page.name}${result.scheduled ? ' (ตั้งเวลาแล้ว)' : ''}</div>`;
+      } catch (e) {
+        log.innerHTML += `<div style="color:var(--danger)">✗ รูป ${pi + 1} → ${page.name}: ${e.message}</div>`;
+      }
+
+      done++;
+      if (done < total) await sleep(delay);
+    }
+  }
+
+  bar.style.width = '100%';
+  label.textContent = `เสร็จ! ${done}/${total}`;
+  btn.disabled = false;
+  isPosting = false;
+});

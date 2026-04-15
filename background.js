@@ -969,6 +969,39 @@ function handleApiRequest(request, sender, sendResponse) {
       return result;
     }
 
+    // ── Post Photo — โพสรูปภาพ 1 รูป → 1 เพจ (รองรับตั้งเวลา) ──
+    if (request.type === 'POST_PHOTO') {
+      const { page, imageData, caption, scheduledTime } = request;
+      if (!imageData) throw new Error('ไม่มีรูปภาพ');
+
+      const [header, base64] = imageData.split(',');
+      const mimeType = (header.match(/:(.+?);/) || [])[1] || 'image/jpeg';
+      const binary = atob(base64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      const blob = new Blob([bytes], { type: mimeType });
+
+      const formData = new FormData();
+      formData.append('access_token', page.access_token);
+      formData.append('source', blob, 'image.jpg');
+      if (caption) formData.append('message', caption);
+
+      if (scheduledTime) {
+        // ตั้งเวลา — Facebook จัดการ server-side (ปิด Chrome ได้)
+        formData.append('published', 'false');
+        formData.append('scheduled_publish_time', String(scheduledTime));
+      }
+      // ถ้าไม่ตั้งเวลา → published=true (default)
+
+      const resp = await fetch(`https://graph.facebook.com/v20.0/${page.id}/photos`, {
+        method: 'POST',
+        body: formData,
+      });
+      const data = await resp.json();
+      if (data.error) throw new Error(data.error.message);
+      return { success: true, postId: data.id || data.post_id, scheduled: !!scheduledTime };
+    }
+
     // ── Bulk Post Now — ทำทั้งหมดใน service worker ปิดแท็บได้ ──
     if (request.type === 'BULK_POST_NOW') {
       const { pages, postData, delay, adAccountId } = request;
