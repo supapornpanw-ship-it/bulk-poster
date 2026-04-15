@@ -613,6 +613,7 @@ input[type="datetime-local"].inp { color-scheme: dark; }
 .fb-preview-cta {
   margin-top: 8px;
   display: flex;
+  justify-content: flex-end;
 }
 .fb-preview-cta span {
   display: inline-block;
