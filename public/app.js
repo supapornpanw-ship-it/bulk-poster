@@ -115,14 +115,19 @@ document.getElementById('btnSaveToken')?.addEventListener('click', async () => {
 document.getElementById('btnConnect').addEventListener('click', async () => {
   const btn = document.getElementById('btnConnect');
   const err = document.getElementById('connectError');
-  btn.disabled = true; btn.textContent = 'กำลังเชื่อมต่อ...'; err.style.display = 'none';
+  btn.disabled = true; btn.textContent = 'กำลังดึง Token จาก Facebook...'; err.style.display = 'none';
   try {
     await sendExt({ type: 'PREPARE_COOKIES' });
+    // เช็คว่าได้ token มาหรือยัง
+    const check = await sendExt({ type: 'CHECK_TOKEN' });
+    if (!check.hasToken) {
+      throw new Error('ดึง Token ไม่ได้ — ลองเปิด facebook.com หรือ Ads Manager ในแท็บอื่นก่อน แล้วกดอีกครั้ง');
+    }
     localStorage.setItem('bp_connected', 'true');
     showApp(); loadPages(); loadAdAccounts();
   } catch (e) {
     err.textContent = '⚠ ' + e.message; err.style.display = '';
-    btn.disabled = false; btn.textContent = '🔌 เชื่อมต่อ Facebook';
+    btn.disabled = false; btn.textContent = 'เชื่อมต่อ Facebook อัตโนมัติ';
   }
 });
 

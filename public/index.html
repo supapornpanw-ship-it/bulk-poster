@@ -22,25 +22,34 @@
     <div class="msg-icon">🔗</div>
     <h2>เชื่อมต่อ Facebook</h2>
 
-    <div class="token-steps">
-      <div class="step-label">วิธีรับ Access Token:</div>
-      <ol class="step-list">
-        <li>เปิด <a href="https://developers.facebook.com/tools/explorer/" target="_blank">Graph API Explorer ↗</a></li>
-        <li>กด <strong>Generate Access Token</strong></li>
-        <li>เลือก permissions: <code>pages_manage_posts</code>, <code>pages_show_list</code></li>
-        <li>Copy token แล้ววางด้านล่าง</li>
-      </ol>
-    </div>
+    <p style="color:var(--muted);font-size:13px;margin-bottom:16px;line-height:1.6">
+      ล็อกอิน Facebook ในเบราว์เซอร์นี้ แล้วกดปุ่มด้านล่าง<br>
+      ระบบจะดึง Token จาก session โดยอัตโนมัติ
+    </p>
 
-    <div class="row-gap" style="margin-top:12px">
-      <input id="manualToken" type="text" class="inp" placeholder="EAAxxxxxxxx..." />
-      <button id="btnSaveToken" class="btn btn-primary">เชื่อมต่อ</button>
-    </div>
+    <button id="btnConnect" class="btn btn-primary" style="width:100%;padding:12px;font-size:15px">
+      เชื่อมต่อ Facebook อัตโนมัติ
+    </button>
     <div id="connectError" class="error-inline" style="display:none"></div>
 
     <div style="margin-top:20px;border-top:1px solid rgba(255,255,255,.08);padding-top:16px;">
-      <p style="color:var(--muted);font-size:12px;margin-bottom:8px">หรือถ้าล็อกอิน Facebook ในเบราว์เซอร์นี้แล้ว:</p>
-      <button id="btnConnect" class="btn btn-ghost">🔌 ลองเชื่อมต่ออัตโนมัติ</button>
+      <details>
+        <summary style="color:var(--muted);font-size:12px;cursor:pointer;user-select:none">
+          เชื่อมต่อไม่ได้? วาง Token เอง
+        </summary>
+        <div style="margin-top:10px">
+          <div class="token-steps" style="margin-bottom:10px">
+            <ol class="step-list" style="font-size:12px">
+              <li>เปิด <a href="https://developers.facebook.com/tools/explorer/" target="_blank">Graph API Explorer</a></li>
+              <li>กด Generate Access Token แล้ว Copy</li>
+            </ol>
+          </div>
+          <div class="row-gap">
+            <input id="manualToken" type="text" class="inp" placeholder="EAAxxxxxxxx..." />
+            <button id="btnSaveToken" class="btn btn-ghost">บันทึก</button>
+          </div>
+        </div>
+      </details>
     </div>
   </div>
 </div>

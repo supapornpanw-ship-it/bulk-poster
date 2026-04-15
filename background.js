@@ -77,86 +77,158 @@ async function fbPost(path, params) {
   return resp.json();
 }
 
-async function extractTokenFromPage(pageUrl) {
-  const resp = await fetch(pageUrl, {
-    headers: { Accept: 'text/html' },
-    signal: AbortSignal.timeout(10000)
-  });
-  const html = await resp.text();
-  // รับเฉพาะ EAA tokens เท่านั้น (format จริงของ Facebook)
+// ── Token Extraction (แบบ Runfeed) ─────────────────────────────
+
+function extractTokenFromHTML(html) {
   const patterns = [
     /"accessToken"\s*:\s*"(EAA[A-Za-z0-9]{50,})"/,
     /"access_token"\s*:\s*"(EAA[A-Za-z0-9]{50,})"/,
+    /accessToken["']\s*[:=]\s*["'](EAA[A-Za-z0-9]{50,})["']/,
     /access_token=(EAA[A-Za-z0-9]{50,})/,
-    /(EAA[A-Za-z0-9]{100,})/,
+    /["'](EAAG[A-Za-z0-9]{50,})["']/,
+    /["'](EAA[A-Za-z0-9]{80,})["']/,
   ];
   for (const p of patterns) {
     const m = html.match(p);
-    if (m) {
-      const token = m[1] || m[0];
-      if (token && token.startsWith('EAA') && token.length > 50) return token;
-    }
+    if (m && m[1] && m[1].startsWith('EAA') && m[1].length > 50) return m[1];
   }
   return null;
 }
 
-async function getOrExtractToken() {
+// ดึง token จาก tab ที่เปิดอยู่ด้วย chrome.scripting.executeScript
+async function extractTokenFromTab(tabId) {
+  try {
+    const results = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: () => document.documentElement.innerHTML,
+    });
+    if (results?.[0]?.result) {
+      return extractTokenFromHTML(results[0].result);
+    }
+  } catch {}
+  return null;
+}
+
+// Scan tab Facebook ที่เปิดอยู่ทั้งหมด (เหมือน Runfeed)
+async function scanExistingFbTabs() {
+  const tabs = await chrome.tabs.query({ url: '*://*.facebook.com/*' });
+  // ลองจาก Ads Manager / Business ก่อน (มี token EAAG มากกว่า)
+  tabs.sort((a, b) => {
+    const score = (url) => {
+      if (url.includes('adsmanager')) return 0;
+      if (url.includes('business.facebook.com')) return 1;
+      return 2;
+    };
+    return score(a.url) - score(b.url);
+  });
+  for (const tab of tabs) {
+    const token = await extractTokenFromTab(tab.id);
+    if (token) return token;
+  }
+  return null;
+}
+
+// Cache token ไว้ 30 นาที
+const TOKEN_TTL = 30 * 60 * 1000;
+
+async function getCachedToken() {
   const { userToken, tokenExpiry } = await chrome.storage.local.get(['userToken', 'tokenExpiry']);
-  // ถ้ามี token อยู่ ใช้ได้เลย (long-lived token ไม่หมดอายุ)
-  if (userToken && userToken.startsWith('EAA')) return userToken;
-  if (userToken && tokenExpiry && Date.now() < tokenExpiry) return userToken;
+  if (userToken && userToken.startsWith('EAA') && tokenExpiry && Date.now() < tokenExpiry) return userToken;
+  // long-lived token (ไม่มี expiry แต่ขึ้นต้นด้วย EAA) → ใช้ได้เลย
+  if (userToken && userToken.startsWith('EAA') && !tokenExpiry) return userToken;
+  return null;
+}
+
+async function saveToken(token) {
+  await chrome.storage.local.set({ userToken: token, tokenExpiry: Date.now() + TOKEN_TTL });
+  return token;
+}
+
+async function getOrExtractToken() {
+  // 1. เช็ค cache ก่อน
+  const cached = await getCachedToken();
+  if (cached) return cached;
+
+  // 2. Scan tab Facebook ที่เปิดอยู่
+  const scanned = await scanExistingFbTabs();
+  if (scanned) return saveToken(scanned);
+
+  // 3. Fallback: เปิด tab ซ่อนดึง token (รอ fb-token.js)
+  const extracted = await extractTokenViaTab();
+  if (extracted) return extracted;
+
   return null;
 }
 
 async function extractAndSaveToken() {
-  const token = await extractTokenFromPage('https://www.facebook.com/').catch(() => null);
-  if (token) {
-    await chrome.storage.local.set({ userToken: token, tokenExpiry: Date.now() + 3600000 });
-    return token;
-  }
-  return null;
+  // Scan tab ที่เปิดอยู่ก่อน
+  const scanned = await scanExistingFbTabs();
+  if (scanned) return saveToken(scanned);
+
+  // Fallback: เปิด tab ซ่อน
+  const extracted = await extractTokenViaTab();
+  return extracted;
 }
 
-// เปิด tab facebook.com ในเบื้องหลัง รอ fb-token.js ส่ง token มา แล้วปิด tab
+// เปิด tab Facebook ในเบื้องหลัง → fb-token.js ดึง token → fb-bridge.js ส่งกลับ
 async function extractTokenViaTab() {
-  // ตรวจก่อนว่ามี token อยู่แล้วหรือเปล่า
-  const { userToken, tokenExpiry } = await chrome.storage.local.get(['userToken', 'tokenExpiry']);
-  if (userToken && userToken.startsWith('EAA') && tokenExpiry && Date.now() < tokenExpiry) {
-    return userToken;
+  const cached = await getCachedToken();
+  if (cached) return cached;
+
+  // ลอง URL หลายอัน (Ads Manager มี token บ่อยที่สุด)
+  const targetUrls = [
+    'https://adsmanager.facebook.com/adsmanager/manage/campaigns',
+    'https://www.facebook.com/pages/',
+    'https://www.facebook.com/',
+  ];
+
+  for (const targetUrl of targetUrls) {
+    const token = await new Promise(async (resolve) => {
+      let tab = null;
+      let resolved = false;
+
+      const done = async (t) => {
+        if (resolved) return;
+        resolved = true;
+        if (tab) { try { await chrome.tabs.remove(tab.id); } catch {} }
+        resolve(t);
+      };
+
+      const timeout = setTimeout(() => done(null), 12000);
+
+      try {
+        tab = await chrome.tabs.create({ url: targetUrl, active: false });
+
+        // รอ tab โหลดเสร็จ แล้วใช้ scripting ดึง HTML
+        const listener = async (tabId, changeInfo) => {
+          if (tabId !== tab.id || changeInfo.status !== 'complete') return;
+          chrome.tabs.onUpdated.removeListener(listener);
+
+          // รอ JS execute 2 วินาที
+          await new Promise(r => setTimeout(r, 2000));
+
+          const token = await extractTokenFromTab(tab.id);
+          clearTimeout(timeout);
+          if (token) await saveToken(token);
+          done(token);
+        };
+        chrome.tabs.onUpdated.addListener(listener);
+      } catch {
+        clearTimeout(timeout);
+        resolve(null);
+      }
+    });
+
+    if (token) return token;
   }
 
-  return new Promise(async (resolve) => {
-    let tab = null;
-    let resolved = false;
-
-    const done = async (token) => {
-      if (resolved) return;
-      resolved = true;
-      if (tab) { try { await chrome.tabs.remove(tab.id); } catch {} }
-      resolve(token);
-    };
-
-    // timeout 15s
-    const timeout = setTimeout(() => done(null), 15000);
-
-    // poll ทุก 500ms ว่า SET_FB_TOKEN มาถึงหรือยัง
+  // สุดท้าย: รอ fb-token.js + fb-bridge.js ส่ง SET_FB_TOKEN (poll)
+  return new Promise((resolve) => {
+    const timeout = setTimeout(() => { clearInterval(poll); resolve(null); }, 5000);
     const poll = setInterval(async () => {
-      const { userToken, tokenExpiry } = await chrome.storage.local.get(['userToken', 'tokenExpiry']);
-      if (userToken && userToken.startsWith('EAA') && tokenExpiry && Date.now() < tokenExpiry) {
-        clearInterval(poll);
-        clearTimeout(timeout);
-        done(userToken);
-      }
+      const t = await getCachedToken();
+      if (t) { clearInterval(poll); clearTimeout(timeout); resolve(t); }
     }, 500);
-
-    // เปิด facebook.com tab ใหม่ (ไม่ active) เพื่อ trigger fb-token.js
-    try {
-      tab = await chrome.tabs.create({ url: 'https://www.facebook.com/', active: false });
-    } catch {
-      clearInterval(poll);
-      clearTimeout(timeout);
-      resolve(null);
-    }
   });
 }
 
@@ -975,10 +1047,7 @@ function handleApiRequest(request, sender, sendResponse) {
     if (request.type === 'SET_FB_TOKEN') {
       // รับเฉพาะ token ที่ขึ้นต้น EAA เท่านั้น
       if (request.token && request.token.startsWith('EAA') && request.token.length > 50) {
-        await chrome.storage.local.set({
-          userToken: request.token,
-          tokenExpiry: Date.now() + 3600000
-        });
+        await saveToken(request.token);
       }
       return { success: true };
     }
