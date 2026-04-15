@@ -590,9 +590,12 @@ input[type="datetime-local"].inp { color-scheme: dark; }
 .fb-preview-card-body {
   background: #303133;
   padding: 12px 16px;
+}
+.fb-preview-card-top {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 .fb-preview-domain {
   font-size: 12px;
@@ -605,15 +608,18 @@ input[type="datetime-local"].inp { color-scheme: dark; }
   font-weight: 600;
   color: #e4e6eb;
   line-height: 1.3;
+  margin-top: 4px;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+.fb-preview-title:empty { display: none; }
 .fb-preview-desc {
   font-size: 13px;
   color: #b0b3b8;
   line-height: 1.4;
+  margin-top: 2px;
   display: -webkit-box;
   -webkit-line-clamp: 1;
   -webkit-box-orient: vertical;
@@ -621,9 +627,8 @@ input[type="datetime-local"].inp { color-scheme: dark; }
 }
 .fb-preview-desc:empty { display: none; }
 .fb-preview-cta {
-  margin-top: 8px;
   display: flex;
-  justify-content: flex-end;
+  flex-shrink: 0;
 }
 .fb-preview-cta span {
   display: inline-block;
