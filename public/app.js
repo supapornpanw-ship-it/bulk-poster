@@ -269,14 +269,21 @@ const CTA_LABELS = {
 
 function updateFbPreview() {
   const msg = document.getElementById('postMsg').value;
-  const title = document.getElementById('cardTitle').value || document.getElementById('cardTitle').placeholder;
-  const domain = document.getElementById('displayLink').value || document.getElementById('displayLink').placeholder;
+  const title = document.getElementById('cardTitle').value;
+  const domain = document.getElementById('displayLink').value;
   const desc = document.getElementById('cardDesc').value;
   const cta = document.getElementById('ctaSel').value;
 
   document.getElementById('fbPreviewMsg').textContent = msg;
-  document.getElementById('fbPreviewTitle').textContent = title;
-  document.getElementById('fbPreviewDomain').textContent = (domain || '').toUpperCase();
+
+  const titleEl = document.getElementById('fbPreviewTitle');
+  titleEl.textContent = title;
+  titleEl.style.display = title ? '' : 'none';
+
+  const domainEl = document.getElementById('fbPreviewDomain');
+  domainEl.textContent = (domain || '').toUpperCase();
+  domainEl.style.display = domain ? '' : 'none';
+
   document.getElementById('fbPreviewDesc').textContent = desc;
 
   // Image is managed by imageFile change handler directly — don't overwrite here
