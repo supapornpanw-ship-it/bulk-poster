@@ -158,18 +158,35 @@
           </section>
         </div>
 
-        <!-- Right: Image + Settings -->
+        <!-- Right: Preview + Settings -->
         <div class="stack">
           <section class="card">
-            <div class="card-title">รูปภาพ</div>
-            <div class="image-drop" id="imageDrop">
-              <img id="imagePreview" src="" alt="" style="display:none" />
-              <div id="imagePrompt" class="image-prompt">
-                <div>📷</div>
-                <div>วางรูปหรือคลิกเพื่ออัปโหลด</div>
+            <div class="card-title">ตัวอย่างโพสใน Facebook</div>
+            <div class="fb-preview">
+              <div class="fb-preview-header">
+                <div class="fb-preview-avatar"></div>
+                <div>
+                  <div class="fb-preview-page">ชื่อเพจ</div>
+                  <div class="fb-preview-time">Just now · 🌐</div>
+                </div>
               </div>
-              <input type="file" id="imageFile" accept="image/*" style="display:none" />
+              <div id="fbPreviewMsg" class="fb-preview-msg"></div>
+              <div class="fb-preview-card">
+                <div class="fb-preview-img" id="fbPreviewImg">
+                  <div id="imagePrompt" class="fb-preview-img-placeholder">คลิกเพื่อเลือกรูป</div>
+                </div>
+                <div class="fb-preview-card-body">
+                  <div id="fbPreviewDomain" class="fb-preview-domain">EXAMPLE.COM</div>
+                  <div id="fbPreviewTitle" class="fb-preview-title">Card Title</div>
+                  <div id="fbPreviewDesc" class="fb-preview-desc"></div>
+                  <div id="fbPreviewCta" class="fb-preview-cta">
+                    <span id="fbPreviewCtaText">Learn More</span>
+                  </div>
+                </div>
+              </div>
             </div>
+            <input type="file" id="imageFile" accept="image/*" style="display:none" />
+            <img id="imagePreview" src="" alt="" style="display:none" />
           </section>
 
           <section class="card">
@@ -207,34 +224,6 @@
           </section>
         </div>
       </div>
-
-      <!-- Facebook Preview -->
-      <section class="card" style="margin-top:24px">
-        <div class="card-title">ตัวอย่างโพสใน Facebook</div>
-        <div class="fb-preview">
-          <div class="fb-preview-header">
-            <div class="fb-preview-avatar"></div>
-            <div>
-              <div class="fb-preview-page">ชื่อเพจ</div>
-              <div class="fb-preview-time">Just now · 🌐</div>
-            </div>
-          </div>
-          <div id="fbPreviewMsg" class="fb-preview-msg"></div>
-          <div class="fb-preview-card">
-            <div class="fb-preview-img" id="fbPreviewImg">
-              <div class="fb-preview-img-placeholder">ยังไม่ได้เลือกรูป</div>
-            </div>
-            <div class="fb-preview-card-body">
-              <div id="fbPreviewDomain" class="fb-preview-domain">EXAMPLE.COM</div>
-              <div id="fbPreviewTitle" class="fb-preview-title">Card Title</div>
-              <div id="fbPreviewDesc" class="fb-preview-desc"></div>
-              <div id="fbPreviewCta" class="fb-preview-cta">
-                <span id="fbPreviewCtaText">Learn More</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
 
       <!-- Action Bar -->
       <section class="action-bar">

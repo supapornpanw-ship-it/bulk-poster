@@ -217,8 +217,8 @@ document.getElementById('destLink').addEventListener('blur', async function () {
   } catch {}
 });
 
-// ─── Image Upload ─────────────────────────────────────────────
-const imageDrop = document.getElementById('imageDrop');
+// ─── Image Upload (via FB Preview card) ───────────────────────
+const fbPreviewImg = document.getElementById('fbPreviewImg');
 const imageFile = document.getElementById('imageFile');
 let currentImageData = null; // base64 data URL ของรูปที่เลือก
 let currentThumbnail = null; // thumbnail เล็กๆ สำหรับ dashboard
@@ -239,7 +239,8 @@ function makeThumbnail(dataUrl, maxSize = 80) {
   });
 }
 
-imageDrop.addEventListener('click', () => imageFile.click());
+fbPreviewImg.addEventListener('click', () => imageFile.click());
+fbPreviewImg.style.cursor = 'pointer';
 imageFile.addEventListener('change', (e) => {
   const file = e.target.files[0];
   if (!file) return;
@@ -249,14 +250,15 @@ imageFile.addEventListener('change', (e) => {
     currentThumbnail = await makeThumbnail(ev.target.result);
     document.getElementById('imagePreview').src = ev.target.result;
     document.getElementById('imagePreview').style.display = '';
-    document.getElementById('imagePrompt').style.display = 'none';
+    // Update FB preview image directly
+    fbPreviewImg.innerHTML = '<img src="' + ev.target.result + '" alt="preview" />';
   };
   reader.readAsDataURL(file);
 });
-imageDrop.addEventListener('dragover', e => { e.preventDefault(); imageDrop.style.borderColor = 'var(--primary)'; });
-imageDrop.addEventListener('dragleave', () => { imageDrop.style.borderColor = ''; });
-imageDrop.addEventListener('drop', e => {
-  e.preventDefault(); imageDrop.style.borderColor = '';
+fbPreviewImg.addEventListener('dragover', e => { e.preventDefault(); fbPreviewImg.style.opacity = '.7'; });
+fbPreviewImg.addEventListener('dragleave', () => { fbPreviewImg.style.opacity = ''; });
+fbPreviewImg.addEventListener('drop', e => {
+  e.preventDefault(); fbPreviewImg.style.opacity = '';
   const file = e.dataTransfer.files[0];
   if (file && file.type.startsWith('image/')) { imageFile.files = e.dataTransfer.files; imageFile.dispatchEvent(new Event('change')); }
 });
@@ -273,20 +275,13 @@ function updateFbPreview() {
   const domain = document.getElementById('displayLink').value || document.getElementById('displayLink').placeholder;
   const desc = document.getElementById('cardDesc').value;
   const cta = document.getElementById('ctaSel').value;
-  const imgSrc = document.getElementById('imagePreview').src;
-  const imgVisible = document.getElementById('imagePreview').style.display !== 'none';
 
   document.getElementById('fbPreviewMsg').textContent = msg;
   document.getElementById('fbPreviewTitle').textContent = title;
   document.getElementById('fbPreviewDomain').textContent = (domain || '').toUpperCase();
   document.getElementById('fbPreviewDesc').textContent = desc;
 
-  const imgEl = document.getElementById('fbPreviewImg');
-  if (imgVisible && imgSrc) {
-    imgEl.innerHTML = '<img src="' + imgSrc + '" alt="preview" />';
-  } else {
-    imgEl.innerHTML = '<div class="fb-preview-img-placeholder">ยังไม่ได้เลือกรูป</div>';
-  }
+  // Image is managed by imageFile change handler directly — don't overwrite here
 
   const ctaEl = document.getElementById('fbPreviewCta');
   const ctaLabel = CTA_LABELS[cta] || '';
@@ -304,9 +299,6 @@ function updateFbPreview() {
 document.getElementById('ctaSel').addEventListener('change', updateFbPreview);
 
 // Update preview when image changes
-const origImageChange = imageFile.onchange;
-imageFile.addEventListener('change', () => setTimeout(updateFbPreview, 100));
-
 updateFbPreview();
 
 // ─── Schedule Toggle ──────────────────────────────────────────
