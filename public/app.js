@@ -199,8 +199,6 @@ document.getElementById('destLink').addEventListener('blur', async function () {
   if (!url || !url.startsWith('http')) return;
   try {
     const og = await sendExt({ type: 'FETCH_OG', url });
-    if (og.title && !document.getElementById('cardTitle').value)
-      document.getElementById('cardTitle').value = og.title;
     if (og.description && !document.getElementById('cardDesc').value)
       document.getElementById('cardDesc').value = og.description;
     // show OG preview
