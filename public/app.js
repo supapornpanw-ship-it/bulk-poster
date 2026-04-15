@@ -261,6 +261,54 @@ imageDrop.addEventListener('drop', e => {
   if (file && file.type.startsWith('image/')) { imageFile.files = e.dataTransfer.files; imageFile.dispatchEvent(new Event('change')); }
 });
 
+// ─── Facebook Preview (live update) ─────────────────────────────
+const CTA_LABELS = {
+  LEARN_MORE: 'Learn More', SHOP_NOW: 'Shop Now', SIGN_UP: 'Sign Up',
+  DOWNLOAD: 'Download', CONTACT_US: 'Contact Us', NO_BUTTON: ''
+};
+
+function updateFbPreview() {
+  const msg = document.getElementById('postMsg').value;
+  const title = document.getElementById('cardTitle').value || document.getElementById('cardTitle').placeholder;
+  const domain = document.getElementById('displayLink').value || document.getElementById('displayLink').placeholder;
+  const desc = document.getElementById('cardDesc').value;
+  const cta = document.getElementById('ctaSel').value;
+  const imgSrc = document.getElementById('imagePreview').src;
+  const imgVisible = document.getElementById('imagePreview').style.display !== 'none';
+
+  document.getElementById('fbPreviewMsg').textContent = msg;
+  document.getElementById('fbPreviewTitle').textContent = title;
+  document.getElementById('fbPreviewDomain').textContent = (domain || '').toUpperCase();
+  document.getElementById('fbPreviewDesc').textContent = desc;
+
+  const imgEl = document.getElementById('fbPreviewImg');
+  if (imgVisible && imgSrc) {
+    imgEl.innerHTML = '<img src="' + imgSrc + '" alt="preview" />';
+  } else {
+    imgEl.innerHTML = '<div class="fb-preview-img-placeholder">ยังไม่ได้เลือกรูป</div>';
+  }
+
+  const ctaEl = document.getElementById('fbPreviewCta');
+  const ctaLabel = CTA_LABELS[cta] || '';
+  if (ctaLabel) {
+    ctaEl.classList.remove('hidden');
+    document.getElementById('fbPreviewCtaText').textContent = ctaLabel;
+  } else {
+    ctaEl.classList.add('hidden');
+  }
+}
+
+['postMsg', 'cardTitle', 'displayLink', 'cardDesc'].forEach(id => {
+  document.getElementById(id).addEventListener('input', updateFbPreview);
+});
+document.getElementById('ctaSel').addEventListener('change', updateFbPreview);
+
+// Update preview when image changes
+const origImageChange = imageFile.onchange;
+imageFile.addEventListener('change', () => setTimeout(updateFbPreview, 100));
+
+updateFbPreview();
+
 // ─── Schedule Toggle ──────────────────────────────────────────
 document.getElementById('schedToggle').addEventListener('change', function () {
   document.getElementById('schedBlock').style.display = this.checked ? '' : 'none';
