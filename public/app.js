@@ -789,17 +789,48 @@ function addPhotoFiles(files) {
   }
 }
 
+function getPhotoScheduleTimes() {
+  const isSchedule = document.getElementById('photoSchedToggle').checked;
+  if (!isSchedule) return null;
+  const dtVal = document.getElementById('photoSchedDT').value;
+  if (!dtVal) return null;
+  const startMs = new Date(dtVal).getTime();
+  const delay = parseInt(document.getElementById('photoDelaySel').value) || 1800000;
+  return { startMs, delay };
+}
+
+function fmtTime(ms) {
+  const d = new Date(ms);
+  const pad = n => String(n).padStart(2, '0');
+  const now = new Date();
+  const time = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  if (d.toDateString() === now.toDateString()) return `วันนี้ ${time}`;
+  const tmr = new Date(now); tmr.setDate(tmr.getDate() + 1);
+  if (d.toDateString() === tmr.toDateString()) return `พรุ่งนี้ ${time}`;
+  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)} ${time}`;
+}
+
 function renderPhotoGrid() {
   photoCountEl.style.display = photoItems.length ? '' : 'none';
   photoCountEl.textContent = `${photoItems.length} รูป`;
 
-  photoGrid.innerHTML = photoItems.map((item, idx) => `
+  const sched = getPhotoScheduleTimes();
+
+  photoGrid.innerHTML = photoItems.map((item, idx) => {
+    const timeHtml = sched
+      ? `<div class="photo-time-badge">${fmtTime(sched.startMs + idx * sched.delay)}</div>`
+      : '';
+    return `
     <div class="photo-item" data-id="${item.id}">
-      <img src="${item.dataUrl}" alt="รูป ${idx + 1}" />
-      <button class="photo-remove" onclick="removePhoto('${item.id}')">&times;</button>
+      <div class="photo-img-wrap">
+        <img src="${item.dataUrl}" alt="รูป ${idx + 1}" />
+        <span class="photo-order">${idx + 1}</span>
+        <button class="photo-remove" onclick="removePhoto('${item.id}')">&times;</button>
+        ${timeHtml}
+      </div>
       <textarea placeholder="แคปชั่นรูปที่ ${idx + 1}..." oninput="updatePhotoCaption('${item.id}', this.value)">${item.caption}</textarea>
-    </div>
-  `).join('');
+    </div>`;
+  }).join('');
 }
 
 window.removePhoto = function(id) {
@@ -823,7 +854,11 @@ document.getElementById('photoSchedToggle').addEventListener('change', function 
     document.getElementById('photoSchedDT').value =
       new Date(dt - dt.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
   }
+  renderPhotoGrid();
 });
+// อัพเดทเวลาบนรูปเมื่อเปลี่ยน datetime หรือ delay
+document.getElementById('photoSchedDT').addEventListener('change', renderPhotoGrid);
+document.getElementById('photoDelaySel').addEventListener('change', renderPhotoGrid);
 
 // ─── Post Photos ─────────────────────────────────────────────
 document.getElementById('btnPostPhotos').addEventListener('click', async () => {
@@ -858,11 +893,15 @@ document.getElementById('btnPostPhotos').addEventListener('click', async () => {
 
   for (let pi = 0; pi < photoItems.length; pi++) {
     const photo = photoItems[pi];
+    // แต่ละรูปมี scheduledTime ต่างกันตาม delay
+    const photoSchedTime = scheduledTime ? scheduledTime + pi * Math.floor(delay / 1000) : null;
+
     for (let si = 0; si < selPages.length; si++) {
       const page = selPages[si];
       const pct = Math.round((done / total) * 100);
       bar.style.width = pct + '%';
-      label.textContent = `รูป ${pi + 1}/${photoItems.length} → ${page.name} (${done}/${total})`;
+      const timeStr = photoSchedTime ? ` (${fmtTime(photoSchedTime * 1000)})` : '';
+      label.textContent = `รูป ${pi + 1}/${photoItems.length} → ${page.name}${timeStr}`;
 
       try {
         const result = await sendExt({
@@ -870,15 +909,18 @@ document.getElementById('btnPostPhotos').addEventListener('click', async () => {
           page,
           imageData: photo.dataUrl,
           caption: photo.caption,
-          scheduledTime,
+          scheduledTime: photoSchedTime,
         });
-        log.innerHTML += `<div style="color:var(--success)">✓ รูป ${pi + 1} → ${page.name}${result.scheduled ? ' (ตั้งเวลาแล้ว)' : ''}</div>`;
+        log.innerHTML += `<div style="color:var(--success)">✓ รูป ${pi + 1} → ${page.name}${photoSchedTime ? ' (' + fmtTime(photoSchedTime * 1000) + ')' : ''}</div>`;
       } catch (e) {
         log.innerHTML += `<div style="color:var(--danger)">✗ รูป ${pi + 1} → ${page.name}: ${e.message}</div>`;
       }
 
       done++;
-      if (done < total) await sleep(delay);
+      // delay ระหว่างเพจ (สั้นกว่า) ถ้าไม่ได้ตั้งเวลา
+      if (done < total && !scheduledTime) await sleep(10000);
+      // ถ้าตั้งเวลา → ไม่ต้อง delay (Facebook จัดการเวลาเอง) แค่รอ 3 วิ ไม่ให้ rate limit
+      if (done < total && scheduledTime) await sleep(3000);
     }
   }
 

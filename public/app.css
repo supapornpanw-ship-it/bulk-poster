@@ -667,3 +667,35 @@ input[type="datetime-local"].inp { color-scheme: dark; }
   font-size: 13px;
   margin-bottom: 12px;
 }
+.photo-time-badge {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(0,0,0,.75);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 8px;
+  text-align: center;
+  pointer-events: none;
+}
+.photo-order {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.photo-img-wrap {
+  position: relative;
+}
