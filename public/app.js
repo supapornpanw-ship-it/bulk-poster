@@ -99,11 +99,7 @@ async function init() {
 
   if (fbToken) {
     try {
-      // เก็บ long-lived token (60 วัน)
       await sendExt({ type: 'SAVE_TOKEN', token: fbToken, expiresIn: fbExpires });
-      localStorage.setItem('bp_connected', 'true');
-      showApp(); loadPages(); loadAdAccounts();
-      return;
     } catch (e) {
       console.error('FB OAuth token save failed:', e);
     }
@@ -113,15 +109,20 @@ async function init() {
     if (err) { err.textContent = '⚠ Facebook Login ล้มเหลว: ' + fbError; err.style.display = ''; }
   }
 
-  // เช็คว่ามี token อยู่ใน extension หรือยัง
+  // เช็ค token แล้วแสดงปุ่มตาม
+  const btn = document.getElementById('btnConnect');
   try {
     const check = await sendExt({ type: 'CHECK_TOKEN' });
     if (check && check.hasToken) {
-      showApp(); loadPages(); loadAdAccounts();
-      return;
+      btn.textContent = 'เข้าใช้งาน';
+      btn.dataset.action = 'enter';
+    } else {
+      btn.textContent = 'เข้าสู่ระบบด้วย Facebook';
+      btn.dataset.action = 'oauth';
     }
-  } catch (e) {
-    console.warn('CHECK_TOKEN failed:', e.message);
+  } catch {
+    btn.textContent = 'เข้าสู่ระบบด้วย Facebook';
+    btn.dataset.action = 'oauth';
   }
 
   document.getElementById('connectScreen').style.display = '';
@@ -153,15 +154,30 @@ document.getElementById('btnSaveToken')?.addEventListener('click', async () => {
 document.getElementById('btnConnect').addEventListener('click', async () => {
   const btn = document.getElementById('btnConnect');
   const err = document.getElementById('connectError');
-  btn.disabled = true; btn.textContent = 'กำลังเชื่อมต่อ Facebook...'; err.style.display = 'none';
+  btn.disabled = true; err.style.display = 'none';
+
+  // ถ้ามี token อยู่แล้ว → เข้าหน้าหลักเลย
+  if (btn.dataset.action === 'enter') {
+    btn.textContent = 'กำลังโหลดเพจ...';
+    try {
+      showApp(); loadPages(); loadAdAccounts();
+      return;
+    } catch (e) {
+      err.textContent = '⚠ ' + e.message; err.style.display = '';
+      btn.disabled = false; btn.textContent = 'เข้าใช้งาน';
+      return;
+    }
+  }
+
+  // ไม่มี token → redirect ไป Facebook OAuth
+  btn.textContent = 'กำลังเชื่อมต่อ Facebook...';
   try {
-    // Facebook OAuth Login — redirect ไป Facebook แล้ว callback กลับมาพร้อม long-lived token
     const APP_ID = '721475520495705';
     const REDIRECT_URI = encodeURIComponent(`${window.location.origin}/api/fb-callback`);
     const SCOPES = 'pages_manage_posts,pages_read_engagement,pages_show_list,ads_management,business_management';
     const oauthUrl = `https://www.facebook.com/v20.0/dialog/oauth?client_id=${APP_ID}&redirect_uri=${REDIRECT_URI}&scope=${SCOPES}&response_type=code`;
     window.location.href = oauthUrl;
-    return; // redirect ออกจากหน้านี้
+    return;
   } catch (e) {
     err.textContent = '⚠ ' + e.message; err.style.display = '';
     btn.disabled = false; btn.textContent = 'เชื่อมต่อ Facebook อัตโนมัติ';
