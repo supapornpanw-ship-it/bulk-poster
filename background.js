@@ -988,8 +988,17 @@ function handleApiRequest(request, sender, sendResponse) {
 
       if (scheduledTime) {
         // ตั้งเวลา — Facebook จัดการ server-side (ปิด Chrome ได้)
-        formData.append('published', 'false');
-        formData.append('scheduled_publish_time', String(scheduledTime));
+        // Facebook ต้องการ Unix timestamp (seconds) ที่เป็นอนาคตอย่างน้อย 10 นาที
+        const nowSec = Math.floor(Date.now() / 1000);
+        const schedSec = Math.floor(Number(scheduledTime));
+        if (schedSec <= nowSec) {
+          // เวลาผ่านไปแล้ว → โพสทันทีแทน ไม่ตั้งเวลา
+          console.warn(`[POST_PHOTO] scheduledTime ${schedSec} is in the past (now=${nowSec}), posting immediately`);
+        } else {
+          formData.append('published', 'false');
+          formData.append('scheduled_publish_time', String(schedSec));
+          console.log(`[POST_PHOTO] scheduling at ${schedSec} (${new Date(schedSec * 1000).toLocaleString()})`);
+        }
       }
       // ถ้าไม่ตั้งเวลา → published=true (default)
 
@@ -999,7 +1008,7 @@ function handleApiRequest(request, sender, sendResponse) {
       });
       const data = await resp.json();
       if (data.error) throw new Error(data.error.message);
-      return { success: true, postId: data.id || data.post_id, scheduled: !!scheduledTime };
+      return { success: true, postId: data.id || data.post_id, scheduled: !!scheduledTime, scheduledAt: scheduledTime };
     }
 
     // ── Bulk Post Now — ทำทั้งหมดใน service worker ปิดแท็บได้ ──

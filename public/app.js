@@ -947,6 +947,7 @@ document.getElementById('btnPostPhotos').addEventListener('click', async () => {
       label.textContent = `รูป ${pi + 1}/${photoItems.length} → ${page.name}${timeStr}`;
 
       try {
+        console.log(`[PHOTO] รูป ${pi+1} → ${page.name} | schedTime=${photoSchedTime} | date=${photoSchedTime ? new Date(photoSchedTime * 1000).toLocaleString() : 'now'} | now=${Math.floor(Date.now()/1000)}`);
         const result = await sendExt({
           type: 'POST_PHOTO',
           page,
