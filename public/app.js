@@ -910,14 +910,18 @@ document.getElementById('btnPostPhotos').addEventListener('click', async () => {
   if (!selectedIds.size) return alert('กรุณาเลือกเพจอย่างน้อย 1 เพจ');
 
   const selPages = pages.filter(p => selectedIds.has(p.id));
-  const delay = parseInt(document.getElementById('photoDelaySel').value) || 1800000;
+  const rawDelayVal = document.getElementById('photoDelaySel').value;
+  const delay = parseInt(rawDelayVal) || 1800000;
   const isSchedule = document.getElementById('photoSchedToggle').checked;
   let scheduledTime = null;
+
+  console.log(`[PHOTO-START] photoDelaySel.value="${rawDelayVal}" → delay=${delay}ms (${delay/1000}s) | isSchedule=${isSchedule} | photos=${photoItems.length} | pages=${selPages.length}`);
 
   if (isSchedule) {
     const dtVal = document.getElementById('photoSchedDT').value;
     if (!dtVal) return alert('กรุณาเลือกวันและเวลา');
     scheduledTime = Math.floor(new Date(dtVal).getTime() / 1000);
+    console.log(`[PHOTO-START] dtVal="${dtVal}" → scheduledTime=${scheduledTime} (${new Date(scheduledTime * 1000).toLocaleString()})`);
     if (scheduledTime <= Math.floor(Date.now() / 1000) + 600) return alert('กรุณาเลือกเวลาอย่างน้อย 10 นาทีข้างหน้า');
   }
 
