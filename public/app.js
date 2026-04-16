@@ -858,12 +858,11 @@ function renderPhotoGrid() {
   photoCountEl.textContent = `${photoItems.length} รูป`;
 
   const sched = getPhotoScheduleTimes();
-  const numPages = selectedIds.size || 1; // จำนวนเพจที่เลือก
 
   photoGrid.innerHTML = photoItems.map((item, idx) => {
-    // แต่ละรูปเริ่มโพสที่ idx * numPages * delay (เพราะ stagger ทั้งรูปและเพจ)
+    // แต่ละรูปตั้งเวลาห่างกันตาม delay (เพจทั้งหมดของรูปเดียวกันใช้เวลาเดียวกัน)
     const timeHtml = sched
-      ? `<div class="photo-time-badge">${fmtTime(sched.startMs + idx * numPages * sched.delay)}</div>`
+      ? `<div class="photo-time-badge">${fmtTime(sched.startMs + idx * sched.delay)}</div>`
       : '';
     return `
     <div class="photo-item" data-id="${item.id}">
@@ -936,21 +935,20 @@ document.getElementById('btnPostPhotos').addEventListener('click', async () => {
   const total = photoItems.length * selPages.length;
   let done = 0;
 
-  let postIndex = 0; // นับโพสทั้งหมด (รูป × เพจ) สำหรับ stagger เวลา
   for (let pi = 0; pi < photoItems.length; pi++) {
     const photo = photoItems[pi];
+    // ดีเลย์ระหว่าง "รูป" (30 นาที, 1 ชม. ฯลฯ) — เพจทั้งหมดของรูปเดียวกันใช้เวลาเดียวกัน
+    const photoSchedTime = scheduledTime ? scheduledTime + pi * Math.floor(delay / 1000) : null;
 
     for (let si = 0; si < selPages.length; si++) {
       const page = selPages[si];
-      // แต่ละคู่ (รูป, เพจ) มี scheduledTime ต่างกันตาม delay — stagger ทั้งรูปและเพจ
-      const photoSchedTime = scheduledTime ? scheduledTime + postIndex * Math.floor(delay / 1000) : null;
       const pct = Math.round((done / total) * 100);
       bar.style.width = pct + '%';
       const timeStr = photoSchedTime ? ` (${fmtTime(photoSchedTime * 1000)})` : '';
       label.textContent = `รูป ${pi + 1}/${photoItems.length} → ${page.name}${timeStr}`;
 
       try {
-        console.log(`[PHOTO] รูป ${pi+1} → ${page.name} | postIndex=${postIndex} | schedTime=${photoSchedTime} | date=${photoSchedTime ? new Date(photoSchedTime * 1000).toLocaleString() : 'now'} | now=${Math.floor(Date.now()/1000)}`);
+        console.log(`[PHOTO] รูป ${pi+1} → ${page.name} | schedTime=${photoSchedTime} | date=${photoSchedTime ? new Date(photoSchedTime * 1000).toLocaleString() : 'now'} | delay=${delay}ms | now=${Math.floor(Date.now()/1000)}`);
         const result = await sendExt({
           type: 'POST_PHOTO',
           page,
@@ -964,11 +962,10 @@ document.getElementById('btnPostPhotos').addEventListener('click', async () => {
       }
 
       done++;
-      postIndex++;
-      // delay ระหว่างเพจ (สั้นกว่า) ถ้าไม่ได้ตั้งเวลา
+      // โพสทันที: รอ 10 วิ ระหว่างเพจ กัน rate limit
       if (done < total && !scheduledTime) await sleep(10000);
-      // ถ้าตั้งเวลา → ไม่ต้อง delay (Facebook จัดการเวลาเอง) แค่รอ 3 วิ ไม่ให้ rate limit
-      if (done < total && scheduledTime) await sleep(3000);
+      // ตั้งเวลา: Facebook จัดการเวลาเอง แค่รอ 15 วิ ระหว่างเพจกันสแปม
+      if (done < total && scheduledTime) await sleep(15000);
     }
   }
 
