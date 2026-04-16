@@ -234,29 +234,29 @@ async function extractTokenViaTab() {
 
 async function getPages() {
   // 1. ลองใช้ cached token ที่ valid (ต้องขึ้นต้น EAA)
-  let { userToken, tokenExpiry } = await chrome.storage.local.get(['userToken', 'tokenExpiry']);
+  const { userToken, tokenExpiry } = await chrome.storage.local.get(['userToken', 'tokenExpiry']);
   if (userToken && userToken.startsWith('EAA') && tokenExpiry && Date.now() < tokenExpiry) {
     const data = await fbGet('/me/accounts?fields=id,name,access_token,picture.type(square){url}&limit=200', userToken);
     if (!data.error) return data;
-    // Token หมดอายุหรือไม่ valid → ลบออก
-    await chrome.storage.local.remove(['userToken', 'tokenExpiry']);
+    console.warn('[getPages] token valid but /me/accounts failed:', JSON.stringify(data.error));
+    // ไม่ลบ token ถ้ายังไม่หมดอายุ — อาจเป็น rate limit หรือ network error
   }
 
-  // 2. Token หมดอายุ → ลองดึงใหม่จาก Facebook tab อัตโนมัติ
-  console.log('[getPages] token expired/missing → re-extracting from Facebook...');
-  const freshToken = await extractAndSaveToken();
-  if (freshToken) {
-    await chrome.storage.local.set({ userToken: freshToken, tokenExpiry: Date.now() + 30 * 60 * 1000 });
-    const data = await fbGet('/me/accounts?fields=id,name,access_token,picture.type(square){url}&limit=200', freshToken);
-    if (!data.error) return data;
+  // 2. ไม่มี token เลย → ลองดึงจาก Facebook tab
+  if (!userToken || !tokenExpiry || Date.now() >= tokenExpiry) {
+    console.log('[getPages] no valid token → extracting from Facebook...');
+    const freshToken = await extractAndSaveToken();
+    if (freshToken) {
+      const data = await fbGet('/me/accounts?fields=id,name,access_token,picture.type(square){url}&limit=200', freshToken);
+      if (!data.error) return data;
+    }
   }
 
-  // 3. ลองดึงผ่าน internal Facebook API (ใช้ cookie auth + fb_dtsg)
-  // ⚠️ วิธีนี้ได้เพจแต่ไม่มี page token → ใช้โพสไม่ได้
+  // 3. Fallback: internal Facebook API (ได้เพจแต่ไม่มี page token)
   const internalResult = await getPagesViaFbDtsg().catch(() => null);
   if (internalResult) return internalResult;
 
-  // 4. ไม่สำเร็จ → แจ้ง user ให้ใส่ token เอง
+  // 4. ไม่สำเร็จ
   throw new Error('TOKEN_REQUIRED');
 }
 
@@ -1022,8 +1022,16 @@ function handleApiRequest(request, sender, sendResponse) {
 
     if (request.type === 'SET_FB_TOKEN') {
       // รับเฉพาะ token ที่ขึ้นต้น EAA เท่านั้น
+      // ⚠️ ห้ามทับ OAuth long-lived token (60 วัน) ด้วย session token สั้นๆ
       if (request.token && request.token.startsWith('EAA') && request.token.length > 50) {
-        await saveToken(request.token);
+        const { tokenExpiry } = await chrome.storage.local.get('tokenExpiry');
+        const remainingMs = tokenExpiry ? tokenExpiry - Date.now() : 0;
+        if (remainingMs > TOKEN_TTL) {
+          // มี long-lived token อยู่แล้ว (เหลืออายุมากกว่า 30 นาที) → ไม่ทับ
+          console.log(`[SET_FB_TOKEN] skip — long-lived token still valid (${Math.round(remainingMs / 86400000)}d left)`);
+        } else {
+          await saveToken(request.token);
+        }
       }
       return { success: true };
     }
