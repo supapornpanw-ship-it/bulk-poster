@@ -244,7 +244,7 @@ async function getPages() {
 
   // 2. Token หมดอายุ → ลองดึงใหม่จาก Facebook tab อัตโนมัติ
   console.log('[getPages] token expired/missing → re-extracting from Facebook...');
-  const freshToken = await extractTokenFromFb();
+  const freshToken = await extractAndSaveToken();
   if (freshToken) {
     await chrome.storage.local.set({ userToken: freshToken, tokenExpiry: Date.now() + 30 * 60 * 1000 });
     const data = await fbGet('/me/accounts?fields=id,name,access_token,picture.type(square){url}&limit=200', freshToken);
@@ -926,7 +926,7 @@ function handleApiRequest(request, sender, sendResponse) {
       // ถ้า Permission Denied → ลองดึง token ใหม่แล้ว retry 1 ครั้ง
       if (data.error && (data.error.code === 10 || data.error.message?.includes('Permission'))) {
         console.warn(`[POST_PHOTO] Permission Denied → refreshing token for ${page.name}...`);
-        const freshToken = await extractTokenFromFb();
+        const freshToken = await extractAndSaveToken();
         if (freshToken) {
           await chrome.storage.local.set({ userToken: freshToken, tokenExpiry: Date.now() + 30 * 60 * 1000 });
           // ดึง page token ใหม่
