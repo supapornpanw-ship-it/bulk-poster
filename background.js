@@ -683,13 +683,6 @@ async function prepareScheduledJob(jobId, pages, postData, delay, scheduledTime,
     }
   }
 
-  // ถ้า QStash สำเร็จ → ลบ Chrome alarm ทิ้ง (ไม่ต้อง fallback ให้ชนกัน)
-  if (serverOk) {
-    for (let i = 0; i < pages.length; i++) {
-      await chrome.alarms.clear(`${jobId}_pub_${i}`);
-    }
-    console.log(`[SCHEDULE] QStash OK → cleared ${pages.length} Chrome alarms`);
-  }
   job.status = okCount > 0 ? 'pending' : 'done';
   job.serverScheduled = serverOk;
   await saveScheduledJobs(jobs);
@@ -698,7 +691,7 @@ async function prepareScheduledJob(jobId, pages, postData, delay, scheduledTime,
     type: 'basic', iconUrl: 'icon128.png', title: 'Bulk Poster',
     message: serverOk
       ? `✅ เตรียม Card Link สำเร็จ ${okCount}/${pages.length} เพจ — ปิด Chrome ได้เลย!`
-      : `✅ เตรียม Card Link สำเร็จ ${okCount}/${pages.length} เพจ — เปิด Chrome ค้างไว้`
+      : `⚠️ เตรียม Card Link สำเร็จ ${okCount}/${pages.length} เพจ — แต่ส่งเซิร์ฟเวอร์ไม่ได้`
   });
 }
 
@@ -783,111 +776,7 @@ async function finalizeIfAllDone(jobs, job, jobId) {
   }
 }
 
-// ─── Alarm Handler ────────────────────────────────────────────────────────
-
-chrome.alarms.onAlarm.addListener(alarm => {
-  if (!alarm.name.startsWith('bp_')) return;
-
-  // ── Alarm: publish เพจเดียว ──
-  const pubMatch = alarm.name.match(/^(bp_\d+)_pub_(\d+)$/);
-  if (pubMatch) {
-    const jobId = pubMatch[1];
-    const idx = parseInt(pubMatch[2]);
-    (async () => {
-      try {
-        const jobs = await getScheduledJobs();
-        const job = jobs.find(j => j.id === jobId);
-        if (!job || job.status === 'cancelled') return;
-
-        // ถ้า QStash จัดการแล้ว → ไม่ต้องทำซ้ำ (alarm นี้เป็น fallback เก่าที่ค้างอยู่)
-        if (job.serverScheduled) {
-          console.log(`[ALARM] ${alarm.name} → QStash จัดการแล้ว ข้าม`);
-          return;
-        }
-
-        // ถ้าเพจนี้โพสไปแล้ว → ข้าม
-        if (job.results && job.results[job.pages[idx]?.id]) {
-          console.log(`[ALARM] ${alarm.name} → เพจนี้โพสไปแล้ว ข้าม`);
-          return;
-        }
-
-        // ถ้า prepare ยังไม่เสร็จ → retry ใน 10 วิ
-        const p = (job.preparedPosts || {})[idx];
-        if (!p || !p.postId) {
-          if (job.status === 'preparing') {
-            chrome.alarms.create(alarm.name, { when: Date.now() + 10000 });
-          }
-          return;
-        }
-
-        chrome.notifications.create(`pub_${jobId}_${idx}`, {
-          type: 'basic', iconUrl: 'icon128.png', title: 'Bulk Poster',
-          message: `📤 Publish เพจ ${idx + 1}: ${job.pages[idx]?.name || ''}`
-        });
-
-        if (!job.results) job.results = {};
-        const resp = await fetch(`https://graph.facebook.com/v20.0/${p.postId}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: new URLSearchParams({ access_token: p.pageToken, is_published: 'true' })
-        });
-        const data = await resp.json();
-        if (data.error) throw new Error(data.error.message);
-
-        job.results[job.pages[idx].id] = { success: true, postId: p.postId, pageName: job.pages[idx].name };
-        job.pageStatuses[idx] = { status: 'done', fireAt: job.scheduledTime, error: null };
-
-        // เช็คครบทุกเพจหรือยัง
-        const total = job.pages.length;
-        const doneCount = Object.keys(job.results).length;
-        if (doneCount >= total) {
-          job.status = 'done';
-          job.executedAt = Date.now();
-          await saveScheduledJobs(jobs);
-          await addHistory({ ...job, type: 'scheduled' });
-          const ok = Object.values(job.results).filter(r => r.success).length;
-          chrome.notifications.create(`done_${jobId}`, {
-            type: 'basic', iconUrl: 'icon128.png', title: 'Bulk Poster',
-            message: `✅ Publish สำเร็จ ${ok}/${total} เพจ`
-          });
-        } else {
-          await saveScheduledJobs(jobs);
-        }
-      } catch (err) {
-        const jobs = await getScheduledJobs();
-        const job = jobs.find(j => j.id === jobId);
-        if (job) {
-          if (!job.results) job.results = {};
-          job.results[job.pages[idx]?.id] = { success: false, error: err.message, pageName: job.pages[idx]?.name };
-          job.pageStatuses[idx] = { status: 'error', fireAt: job.scheduledTime, error: err.message };
-          await saveScheduledJobs(jobs);
-        }
-        chrome.notifications.create(`err_${jobId}_${idx}`, {
-          type: 'basic', iconUrl: 'icon128.png', title: 'Bulk Poster — Error',
-          message: `❌ ${job?.pages[idx]?.name}: ${err.message}`
-        });
-      }
-    })();
-    return;
-  }
-
-  // ── Alarm เดิม: POST_TO_PAGE immediate (ไม่ใช้แล้วสำหรับ schedule ใหม่) ──
-  const m = alarm.name.match(/^(bp_\d+)_page_(\d+)$/);
-  if (m) {
-    const jobId = m[1];
-    const pageIdx = parseInt(m[2]);
-    updatePageStatus(jobId, pageIdx, 'posting').then(async () => {
-      try {
-        await executePagePost(jobId, pageIdx);
-      } catch (err) {
-        chrome.notifications.create(`err_${alarm.name}`, {
-          type: 'basic', iconUrl: 'icon128.png', title: 'Bulk Poster — Error',
-          message: `❌ ${err.message}`
-        });
-      }
-    });
-  }
-});
+// (ไม่ใช้ Chrome Alarm แล้ว — QStash จัดการ publish ตรงเวลาฝั่ง server ทั้งหมด)
 
 // อัพเดท status ของเพจใน job
 async function updatePageStatus(jobId, pageIdx, status, error) {
@@ -1182,12 +1071,7 @@ function handleApiRequest(request, sender, sendResponse) {
       jobs.push(job);
       await saveScheduledJobs(jobs);
 
-      // สร้าง alarm แยกต่อเพจ — 1 alarm = 1 เพจ = 1 API call
-      for (let i = 0; i < pages.length; i++) {
-        const fireAt = scheduledTime + i * (delay || 0);
-        chrome.alarms.create(`${id}_pub_${i}`, { when: fireAt });
-      }
-      // เตรียมโพสใน background
+      // เตรียมโพสใน background (QStash จัดการ publish ตรงเวลา — ไม่ใช้ Chrome alarm)
       prepareScheduledJob(id, pages, postData, delay, scheduledTime, adAccountId);
       return { success: true, id, jobId: id };
     }
@@ -1218,10 +1102,6 @@ function handleApiRequest(request, sender, sendResponse) {
       if (j) {
         j.status = 'cancelled';
         await saveScheduledJobs(jobs);
-        // ยกเลิก alarm ทุกเพจ (ชื่อ _pub_ ตรงกับตอนสร้าง)
-        for (let i = 0; i < (j.pages || []).length; i++) {
-          await chrome.alarms.clear(`${request.id}_pub_${i}`);
-        }
       }
       return { success: true };
     }
