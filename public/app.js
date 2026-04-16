@@ -143,7 +143,6 @@ document.getElementById('btnSaveToken')?.addEventListener('click', async () => {
   btn.disabled = true; btn.textContent = 'กำลังเชื่อมต่อ...';
   try {
     await sendExt({ type: 'SAVE_TOKEN', token });
-    await sendExt({ type: 'PREPARE_COOKIES' });
     showApp(); loadPages(); loadAdAccounts();
   } catch (e) {
     err.textContent = '⚠ ' + e.message; err.style.display = '';

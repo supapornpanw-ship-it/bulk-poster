@@ -672,6 +672,9 @@ async function prepareScheduledJob(jobId, pages, postData, delay, scheduledTime,
         pageToken: job.preparedPosts[i]?.pageToken,
       })).filter(p => p.postId);
 
+      // ส่ง userToken ไปด้วย เพื่อให้ server refresh page token ได้ถ้าหมดอายุ
+      const { userToken: savedUserToken } = await chrome.storage.local.get('userToken');
+
       const resp = await fetch('https://bulk-poster.vercel.app/api/schedule', {
         method: 'POST',
         headers: {
@@ -683,6 +686,7 @@ async function prepareScheduledJob(jobId, pages, postData, delay, scheduledTime,
           pages: serverPages,
           scheduledTime,
           delay: delay || 0,
+          userToken: savedUserToken || null,
           postData: { link: postData.link, message: postData.message, name: postData.name, description: postData.description, caption: postData.caption, cta: postData.cta, thumbnail },
         }),
       });

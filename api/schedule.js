@@ -14,7 +14,7 @@ export default async function handler(req, res) {
   if (auth !== 'bp_secret_2024') return res.status(401).json({ error: 'Unauthorized' });
 
   try {
-    const { jobId, pages, scheduledTime, delay, postData } = req.body;
+    const { jobId, pages, scheduledTime, delay, postData, userToken } = req.body;
     if (!jobId || !pages?.length || !scheduledTime) {
       return res.status(400).json({ error: 'Missing jobId, pages, or scheduledTime' });
     }
@@ -26,6 +26,7 @@ export default async function handler(req, res) {
       scheduledTime,
       delay: delay || 0,
       postData: postData || {},
+      userToken: userToken || null, // long-lived token สำหรับ refresh page token ตอน publish
       status: 'pending',
       createdAt: Date.now(),
       results: {},
