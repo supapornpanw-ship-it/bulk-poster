@@ -1034,10 +1034,14 @@ function handleApiRequest(request, sender, sendResponse) {
     }
 
     if (request.type === 'SAVE_TOKEN') {
+      const expiresMs = request.expiresIn
+        ? request.expiresIn * 1000                   // Facebook ส่งเป็น seconds
+        : 60 * 24 * 3600000;                         // default 60 วัน
       await chrome.storage.local.set({
         userToken: request.token,
-        tokenExpiry: Date.now() + 60 * 24 * 3600000 // 60 วัน
+        tokenExpiry: Date.now() + expiresMs
       });
+      console.log(`[SAVE_TOKEN] saved, expires in ${Math.round(expiresMs / 86400000)} days`);
       return { success: true };
     }
 
