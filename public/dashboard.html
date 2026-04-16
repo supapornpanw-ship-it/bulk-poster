@@ -271,6 +271,7 @@
     <div class="dash-actions">
       <span class="refresh-time" id="lastUpdate"></span>
       <button class="btn btn-ghost btn-sm" id="btnRefresh">Refresh</button>
+      <button class="btn btn-danger btn-sm" id="btnClearOld">ลบงานเก่า</button>
       <a href="/" class="btn btn-primary btn-sm">โพสต์ใหม่</a>
     </div>
   </div>
@@ -308,6 +309,29 @@ const API = '/api/jobs';
 let allJobs = [];
 
 document.getElementById('btnRefresh').addEventListener('click', loadJobs);
+document.getElementById('btnClearOld').addEventListener('click', clearOldJobs);
+
+async function clearOldJobs() {
+  if (!confirm('ลบงานเก่าทั้งหมด? (เก็บเฉพาะงานที่กำลังตั้งเวลา)')) return;
+  const btn = document.getElementById('btnClearOld');
+  btn.disabled = true;
+  btn.textContent = 'กำลังลบ...';
+  try {
+    const resp = await fetch('/api/clear-jobs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-bp-secret': 'bp_secret_2024' },
+    });
+    const data = await resp.json();
+    if (data.error) throw new Error(data.error);
+    alert(`ลบแล้ว ${data.deleted} งาน (เก็บไว้ ${data.kept} งานที่รอ publish)`);
+    loadJobs();
+  } catch (err) {
+    alert('Error: ' + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'ลบงานเก่า';
+  }
+}
 
 function fmtDate(ts) {
   if (!ts) return '-';
