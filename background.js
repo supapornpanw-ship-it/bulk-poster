@@ -234,7 +234,7 @@ async function extractTokenViaTab() {
 
 async function getPages() {
   // 1. ลองใช้ cached token ที่ valid (ต้องขึ้นต้น EAA)
-  const { userToken, tokenExpiry } = await chrome.storage.local.get(['userToken', 'tokenExpiry']);
+  let { userToken, tokenExpiry } = await chrome.storage.local.get(['userToken', 'tokenExpiry']);
   if (userToken && userToken.startsWith('EAA') && tokenExpiry && Date.now() < tokenExpiry) {
     const data = await fbGet('/me/accounts?fields=id,name,access_token,picture.type(square){url}&limit=200', userToken);
     if (!data.error) return data;
@@ -242,11 +242,21 @@ async function getPages() {
     await chrome.storage.local.remove(['userToken', 'tokenExpiry']);
   }
 
-  // 2. ลองดึงผ่าน internal Facebook API (ใช้ cookie auth + fb_dtsg)
+  // 2. Token หมดอายุ → ลองดึงใหม่จาก Facebook tab อัตโนมัติ
+  console.log('[getPages] token expired/missing → re-extracting from Facebook...');
+  const freshToken = await extractTokenFromFb();
+  if (freshToken) {
+    await chrome.storage.local.set({ userToken: freshToken, tokenExpiry: Date.now() + 30 * 60 * 1000 });
+    const data = await fbGet('/me/accounts?fields=id,name,access_token,picture.type(square){url}&limit=200', freshToken);
+    if (!data.error) return data;
+  }
+
+  // 3. ลองดึงผ่าน internal Facebook API (ใช้ cookie auth + fb_dtsg)
+  // ⚠️ วิธีนี้ได้เพจแต่ไม่มี page token → ใช้โพสไม่ได้
   const internalResult = await getPagesViaFbDtsg().catch(() => null);
   if (internalResult) return internalResult;
 
-  // 3. ไม่สำเร็จ → แจ้ง user ให้ใส่ token เอง
+  // 4. ไม่สำเร็จ → แจ้ง user ให้ใส่ token เอง
   throw new Error('TOKEN_REQUIRED');
 }
 
@@ -881,39 +891,56 @@ function handleApiRequest(request, sender, sendResponse) {
       const { page, imageData, caption, scheduledTime } = request;
       if (!imageData) throw new Error('ไม่มีรูปภาพ');
 
-      const [header, base64] = imageData.split(',');
-      const mimeType = (header.match(/:(.+?);/) || [])[1] || 'image/jpeg';
-      const binary = atob(base64);
-      const bytes = new Uint8Array(binary.length);
-      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-      const blob = new Blob([bytes], { type: mimeType });
+      async function buildFormData(token) {
+        const [header, base64] = imageData.split(',');
+        const mimeType = (header.match(/:(.+?);/) || [])[1] || 'image/jpeg';
+        const binary = atob(base64);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        const blob = new Blob([bytes], { type: mimeType });
 
-      const formData = new FormData();
-      formData.append('access_token', page.access_token);
-      formData.append('source', blob, 'image.jpg');
-      if (caption) formData.append('message', caption);
+        const fd = new FormData();
+        fd.append('access_token', token);
+        fd.append('source', blob, 'image.jpg');
+        if (caption) fd.append('message', caption);
 
-      if (scheduledTime) {
-        // ตั้งเวลา — Facebook จัดการ server-side (ปิด Chrome ได้)
-        // Facebook ต้องการ Unix timestamp (seconds) ที่เป็นอนาคตอย่างน้อย 10 นาที
-        const nowSec = Math.floor(Date.now() / 1000);
-        const schedSec = Math.floor(Number(scheduledTime));
-        if (schedSec <= nowSec) {
-          // เวลาผ่านไปแล้ว → โพสทันทีแทน ไม่ตั้งเวลา
-          console.warn(`[POST_PHOTO] scheduledTime ${schedSec} is in the past (now=${nowSec}), posting immediately`);
-        } else {
-          formData.append('published', 'false');
-          formData.append('scheduled_publish_time', String(schedSec));
-          console.log(`[POST_PHOTO] scheduling at ${schedSec} (${new Date(schedSec * 1000).toLocaleString()})`);
+        if (scheduledTime) {
+          const nowSec = Math.floor(Date.now() / 1000);
+          const schedSec = Math.floor(Number(scheduledTime));
+          if (schedSec <= nowSec) {
+            console.warn(`[POST_PHOTO] scheduledTime ${schedSec} is in the past (now=${nowSec}), posting immediately`);
+          } else {
+            fd.append('published', 'false');
+            fd.append('scheduled_publish_time', String(schedSec));
+          }
+        }
+        return fd;
+      }
+
+      // ลองโพสด้วย token ที่มี
+      let token = page.access_token;
+      let formData = await buildFormData(token);
+      let resp = await fetch(`https://graph.facebook.com/v20.0/${page.id}/photos`, { method: 'POST', body: formData });
+      let data = await resp.json();
+
+      // ถ้า Permission Denied → ลองดึง token ใหม่แล้ว retry 1 ครั้ง
+      if (data.error && (data.error.code === 10 || data.error.message?.includes('Permission'))) {
+        console.warn(`[POST_PHOTO] Permission Denied → refreshing token for ${page.name}...`);
+        const freshToken = await extractTokenFromFb();
+        if (freshToken) {
+          await chrome.storage.local.set({ userToken: freshToken, tokenExpiry: Date.now() + 30 * 60 * 1000 });
+          // ดึง page token ใหม่
+          const pagesData = await fbGet('/me/accounts?fields=id,name,access_token&limit=200', freshToken);
+          const freshPage = (pagesData.data || []).find(p => p.id === page.id);
+          if (freshPage && freshPage.access_token) {
+            token = freshPage.access_token;
+            formData = await buildFormData(token);
+            resp = await fetch(`https://graph.facebook.com/v20.0/${page.id}/photos`, { method: 'POST', body: formData });
+            data = await resp.json();
+          }
         }
       }
-      // ถ้าไม่ตั้งเวลา → published=true (default)
 
-      const resp = await fetch(`https://graph.facebook.com/v20.0/${page.id}/photos`, {
-        method: 'POST',
-        body: formData,
-      });
-      const data = await resp.json();
       if (data.error) throw new Error(data.error.message);
       return { success: true, postId: data.id || data.post_id, scheduled: !!scheduledTime, scheduledAt: scheduledTime };
     }
