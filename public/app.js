@@ -113,6 +113,18 @@ async function init() {
     if (err) { err.textContent = '⚠ Facebook Login ล้มเหลว: ' + fbError; err.style.display = ''; }
   }
 
+  // เช็คว่าเคยเชื่อมต่อแล้วหรือยัง (token เก่ายังอยู่ใน extension)
+  try {
+    const check = await sendExt({ type: 'CHECK_TOKEN' });
+    if (check && check.hasToken && !check.expired) {
+      localStorage.setItem('bp_connected', 'true');
+      showApp(); loadPages(); loadAdAccounts();
+      return;
+    }
+  } catch (e) {
+    console.warn('CHECK_TOKEN failed:', e.message);
+  }
+
   document.getElementById('connectScreen').style.display = '';
 }
 
