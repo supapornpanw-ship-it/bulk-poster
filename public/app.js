@@ -116,14 +116,8 @@ async function init() {
     if (check && check.hasToken) {
       btn.textContent = 'เข้าใช้งาน';
       btn.dataset.action = 'enter';
-    } else {
-      btn.textContent = 'เข้าสู่ระบบด้วย Facebook';
-      btn.dataset.action = 'oauth';
     }
-  } catch {
-    btn.textContent = 'เข้าสู่ระบบด้วย Facebook';
-    btn.dataset.action = 'oauth';
-  }
+  } catch {}
 
   document.getElementById('connectScreen').style.display = '';
 }
@@ -159,29 +153,32 @@ document.getElementById('btnConnect').addEventListener('click', async () => {
   // ถ้ามี token อยู่แล้ว → เข้าหน้าหลักเลย
   if (btn.dataset.action === 'enter') {
     btn.textContent = 'กำลังโหลดเพจ...';
-    try {
-      showApp(); loadPages(); loadAdAccounts();
-      return;
-    } catch (e) {
-      err.textContent = '⚠ ' + e.message; err.style.display = '';
-      btn.disabled = false; btn.textContent = 'เข้าใช้งาน';
-      return;
-    }
+    showApp(); loadPages(); loadAdAccounts();
+    return;
   }
 
-  // ไม่มี token → redirect ไป Facebook OAuth
-  btn.textContent = 'กำลังเชื่อมต่อ Facebook...';
+  // ดึง token จาก Facebook session อัตโนมัติ
+  btn.textContent = 'กำลังดึง Token จาก Facebook...';
   try {
-    const APP_ID = '721475520495705';
-    const REDIRECT_URI = encodeURIComponent(`${window.location.origin}/api/fb-callback`);
-    const SCOPES = 'pages_manage_posts,pages_read_engagement,pages_show_list,ads_management,business_management';
-    const oauthUrl = `https://www.facebook.com/v20.0/dialog/oauth?client_id=${APP_ID}&redirect_uri=${REDIRECT_URI}&scope=${SCOPES}&response_type=code`;
-    window.location.href = oauthUrl;
+    await sendExt({ type: 'PREPARE_COOKIES' });
+    const check = await sendExt({ type: 'CHECK_TOKEN' });
+    if (!check.hasToken) {
+      throw new Error('ดึง Token ไม่ได้ — ลองเปิด facebook.com ในแท็บอื่นก่อน แล้วกดอีกครั้ง');
+    }
+    showApp(); loadPages(); loadAdAccounts();
     return;
   } catch (e) {
     err.textContent = '⚠ ' + e.message; err.style.display = '';
-    btn.disabled = false; btn.textContent = 'เชื่อมต่อ Facebook อัตโนมัติ';
+    btn.disabled = false; btn.textContent = 'เชื่อมต่อ Facebook';
   }
+});
+
+// ─── OAuth Login (long-lived token 60 วัน) ──────────────────
+document.getElementById('btnOAuth').addEventListener('click', () => {
+  const APP_ID = '721475520495705';
+  const REDIRECT_URI = encodeURIComponent(`${window.location.origin}/api/fb-callback`);
+  const SCOPES = 'pages_manage_posts,pages_read_engagement,pages_show_list,ads_management,business_management';
+  window.location.href = `https://www.facebook.com/v20.0/dialog/oauth?client_id=${APP_ID}&redirect_uri=${REDIRECT_URI}&scope=${SCOPES}&response_type=code`;
 });
 
 // ─── Pages ────────────────────────────────────────────────────
