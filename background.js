@@ -683,7 +683,13 @@ async function prepareScheduledJob(jobId, pages, postData, delay, scheduledTime,
     }
   }
 
-  // alarm ยังเก็บไว้เป็น fallback ถ้า server ไม่ได้
+  // ถ้า QStash สำเร็จ → ลบ Chrome alarm ทิ้ง (ไม่ต้อง fallback ให้ชนกัน)
+  if (serverOk) {
+    for (let i = 0; i < pages.length; i++) {
+      await chrome.alarms.clear(`${jobId}_pub_${i}`);
+    }
+    console.log(`[SCHEDULE] QStash OK → cleared ${pages.length} Chrome alarms`);
+  }
   job.status = okCount > 0 ? 'pending' : 'done';
   job.serverScheduled = serverOk;
   await saveScheduledJobs(jobs);
@@ -792,6 +798,18 @@ chrome.alarms.onAlarm.addListener(alarm => {
         const jobs = await getScheduledJobs();
         const job = jobs.find(j => j.id === jobId);
         if (!job || job.status === 'cancelled') return;
+
+        // ถ้า QStash จัดการแล้ว → ไม่ต้องทำซ้ำ (alarm นี้เป็น fallback เก่าที่ค้างอยู่)
+        if (job.serverScheduled) {
+          console.log(`[ALARM] ${alarm.name} → QStash จัดการแล้ว ข้าม`);
+          return;
+        }
+
+        // ถ้าเพจนี้โพสไปแล้ว → ข้าม
+        if (job.results && job.results[job.pages[idx]?.id]) {
+          console.log(`[ALARM] ${alarm.name} → เพจนี้โพสไปแล้ว ข้าม`);
+          return;
+        }
 
         // ถ้า prepare ยังไม่เสร็จ → retry ใน 10 วิ
         const p = (job.preparedPosts || {})[idx];
@@ -1200,9 +1218,9 @@ function handleApiRequest(request, sender, sendResponse) {
       if (j) {
         j.status = 'cancelled';
         await saveScheduledJobs(jobs);
-        // ยกเลิก alarm ทุกเพจ
+        // ยกเลิก alarm ทุกเพจ (ชื่อ _pub_ ตรงกับตอนสร้าง)
         for (let i = 0; i < (j.pages || []).length; i++) {
-          await chrome.alarms.clear(`${request.id}_page_${i}`);
+          await chrome.alarms.clear(`${request.id}_pub_${i}`);
         }
       }
       return { success: true };
