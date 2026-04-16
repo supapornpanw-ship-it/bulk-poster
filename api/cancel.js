@@ -13,7 +13,7 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const auth = req.headers['x-bp-secret'];
-  if (auth !== process.env.BP_API_SECRET) return res.status(401).json({ error: 'Unauthorized' });
+  if (auth !== 'bp_secret_2024') return res.status(401).json({ error: 'Unauthorized' });
 
   try {
     const { jobId } = req.body;
