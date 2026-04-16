@@ -51,7 +51,17 @@ export default async function handler(req, res) {
     // อัพเดท result ใน Redis
     if (!job.results) job.results = {};
     if (fbData.error) {
-      job.results[page.id] = { success: false, error: fbData.error.message, pageName: page.name };
+      // เช็คว่าโพสถูก publish ไปแล้วหรือยัง (Creative → auto-published)
+      const checkResp = await fetch(
+        `https://graph.facebook.com/v20.0/${page.postId}?fields=is_published&access_token=${encodeURIComponent(page.pageToken)}`
+      );
+      const checkData = await checkResp.json();
+      if (checkData.is_published) {
+        // โพสถูก publish ไปแล้ว ถือว่าสำเร็จ
+        job.results[page.id] = { success: true, postId: page.postId, pageName: page.name, note: 'already published' };
+      } else {
+        job.results[page.id] = { success: false, error: fbData.error.message, pageName: page.name };
+      }
     } else {
       job.results[page.id] = { success: true, postId: page.postId, pageName: page.name };
     }
