@@ -769,12 +769,12 @@ async function updateSchedBadge(n) {
   badge.textContent = n; badge.style.display = n ? '' : 'none';
 }
 
-// auto-refresh scheduled list ทุก 30 วินาที
+// auto-refresh scheduled list ทุก 60 วินาที (ลดจาก 30s เพื่อประหยัด Redis)
 setInterval(async () => {
   const tab = document.querySelector('.tab-btn.active');
   if (tab && tab.dataset.tab === 'scheduled' && !activePollingJobId) loadScheduled();
   updateSchedBadge();
-}, 30000);
+}, 60000);
 
 // ─── History ──────────────────────────────────────────────────
 async function loadHistory() {

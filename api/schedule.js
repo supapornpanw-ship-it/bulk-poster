@@ -47,7 +47,7 @@ export default async function handler(req, res) {
           'Authorization': `Bearer ${qstashToken}`,
           'Content-Type': 'application/json',
           'Upstash-Not-Before': String(fireAt),
-          'Upstash-Retries': '3',
+          'Upstash-Retries': '5',
         },
         body: JSON.stringify({ jobId, pageIndex: i }),
       });

@@ -16,30 +16,31 @@ export default async function handler(req, res) {
     const jobIds = await redis.smembers('jobs:all');
     if (!jobIds || !jobIds.length) return res.status(200).json({ deleted: 0, kept: 0 });
 
+    // ── ใช้ mget ดึงทุก job ในครั้งเดียว (1 Redis call แทน N calls) ──
+    const keys = jobIds.map(id => `job:${id}`);
+    const rawResults = await redis.mget(...keys);
+
     let deleted = 0;
     let kept = 0;
     const pipeline = redis.pipeline();
 
-    for (const id of jobIds) {
-      const raw = await redis.get(`job:${id}`);
+    for (let i = 0; i < jobIds.length; i++) {
+      const raw = rawResults[i];
       if (!raw) {
-        // key หมดอายุแล้ว → ลบออกจาก set
-        pipeline.srem('jobs:all', id);
+        pipeline.srem('jobs:all', jobIds[i]);
         deleted++;
         continue;
       }
       const job = typeof raw === 'string' ? JSON.parse(raw) : raw;
 
-      // เก็บ job ที่กำลังรอ publish (pending / preparing)
       if (job.status === 'pending' || job.status === 'preparing') {
         kept++;
         continue;
       }
 
-      // ลบ job ที่เสร็จแล้ว / error / cancelled
-      pipeline.del(`job:${id}`);
-      pipeline.del(`qstash:${id}`);
-      pipeline.srem('jobs:all', id);
+      pipeline.del(`job:${jobIds[i]}`);
+      pipeline.del(`qstash:${jobIds[i]}`);
+      pipeline.srem('jobs:all', jobIds[i]);
       deleted++;
     }
 

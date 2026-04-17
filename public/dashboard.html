@@ -543,7 +543,7 @@ async function cancelJob(jobId, btnEl) {
 }
 
 loadJobs();
-setInterval(loadJobs, 30000);
+setInterval(loadJobs, 60000); // ลดจาก 30s → 60s เพื่อประหยัด Redis requests
 </script>
 
 </body>
