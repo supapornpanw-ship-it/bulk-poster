@@ -1,15 +1,10 @@
-// POST /api/schedule — รับ prepared posts จาก extension แล้วตั้งเวลา publish ผ่าน QStash REST API
-import { Redis } from '@upstash/redis';
-
-const redis = new Redis({
-  url: process.env.UPSTASH_REDIS_REST_URL,
-  token: process.env.UPSTASH_REDIS_REST_TOKEN,
-});
+// POST /api/schedule — ตั้งเวลาผ่าน QStash โดยไม่ใช้ Redis
+// ข้อมูลทั้งหมด (pageToken, postId, userToken) ถูกยัดลงใน QStash message body
+// พอ QStash ยิง → publish.js อ่านจาก body ได้เลย ไม่ต้อง Redis
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  // ตรวจ secret (hardcoded — personal project)
   const auth = req.headers['x-bp-secret'];
   if (auth !== 'bp_secret_2024') return res.status(401).json({ error: 'Unauthorized' });
 
@@ -19,28 +14,25 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Missing jobId, pages, or scheduledTime' });
     }
 
-    // เก็บ job ใน Redis (TTL 7 วัน)
-    const job = {
-      jobId,
-      pages,
-      scheduledTime,
-      delay: delay || 0,
-      postData: postData || {},
-      userToken: userToken || null, // long-lived token สำหรับ refresh page token ตอน publish
-      status: 'pending',
-      createdAt: Date.now(),
-      results: {},
-    };
-    await redis.set(`job:${jobId}`, JSON.stringify(job), { ex: 604800 });
-    await redis.sadd('jobs:all', jobId);
-
-    // ตั้ง QStash schedule แยกต่อเพจ — ใช้ REST API ตรงๆ แทน SDK
     const baseUrl = `https://${req.headers.host}/api/publish`;
     const qstashToken = process.env.QSTASH_TOKEN;
     const qstashIds = [];
 
     for (let i = 0; i < pages.length; i++) {
+      const page = pages[i];
       const fireAt = Math.floor((scheduledTime + i * (delay || 0)) / 1000);
+
+      // ── ยัดทุกอย่างที่ publish.js ต้องใช้ลงใน body ──
+      const messageBody = {
+        jobId,
+        pageIndex: i,
+        pageId: page.id,
+        pageName: page.name,
+        pageToken: page.pageToken,
+        postId: page.postId,
+        userToken: userToken || null, // สำหรับ refresh token ตอน publish 24hr+
+      };
+
       const qstashResp = await fetch(`https://qstash-us-east-1.upstash.io/v2/publish/${baseUrl}`, {
         method: 'POST',
         headers: {
@@ -49,7 +41,7 @@ export default async function handler(req, res) {
           'Upstash-Not-Before': String(fireAt),
           'Upstash-Retries': '5',
         },
-        body: JSON.stringify({ jobId, pageIndex: i }),
+        body: JSON.stringify(messageBody),
       });
 
       const qstashData = await qstashResp.json();
@@ -62,10 +54,13 @@ export default async function handler(req, res) {
       qstashIds.push(qstashData.messageId);
     }
 
-    // เก็บ QStash message IDs สำหรับ cancel
-    await redis.set(`qstash:${jobId}`, JSON.stringify(qstashIds), { ex: 604800 });
-
-    return res.status(200).json({ success: true, jobId, scheduled: pages.length });
+    // ส่ง qstashIds กลับให้ extension เก็บใน chrome.storage.local สำหรับ cancel
+    return res.status(200).json({
+      success: true,
+      jobId,
+      scheduled: pages.length,
+      qstashIds,
+    });
   } catch (err) {
     console.error('Schedule error:', err);
     return res.status(500).json({ error: err.message });

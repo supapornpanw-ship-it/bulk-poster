@@ -312,25 +312,7 @@ document.getElementById('btnRefresh').addEventListener('click', loadJobs);
 document.getElementById('btnClearOld').addEventListener('click', clearOldJobs);
 
 async function clearOldJobs() {
-  if (!confirm('ลบงานเก่าทั้งหมด? (เก็บเฉพาะงานที่กำลังตั้งเวลา)')) return;
-  const btn = document.getElementById('btnClearOld');
-  btn.disabled = true;
-  btn.textContent = 'กำลังลบ...';
-  try {
-    const resp = await fetch('/api/clear-jobs', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-bp-secret': 'bp_secret_2024' },
-    });
-    const data = await resp.json();
-    if (data.error) throw new Error(data.error);
-    alert(`ลบแล้ว ${data.deleted} งาน (เก็บไว้ ${data.kept} งานที่รอ publish)`);
-    loadJobs();
-  } catch (err) {
-    alert('Error: ' + err.message);
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'ลบงานเก่า';
-  }
+  alert('ลบผ่าน Extension โดยตรง — Dashboard ไม่ใช้ Redis แล้ว');
 }
 
 function fmtDate(ts) {
@@ -496,54 +478,21 @@ function renderJobs(jobs) {
 }
 
 async function loadJobs() {
-  const btn = document.getElementById('btnRefresh');
-  btn.disabled = true;
-  btn.textContent = '...';
-  try {
-    const resp = await fetch(API);
-    const data = await resp.json();
-    allJobs = data.jobs || [];
-    renderJobs(allJobs);
-    document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString('th-TH');
-  } catch (err) {
-    document.getElementById('content').innerHTML = `
-      <div class="empty">
-        <div class="empty-icon">⚠️</div>
-        <div>โหลดข้อมูลไม่ได้: ${err.message}</div>
-      </div>`;
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'Refresh';
-  }
+  // ข้อมูล job ย้ายไปอยู่ใน Chrome extension แล้ว (ไม่ใช้ Redis)
+  document.getElementById('content').innerHTML = `
+    <div class="empty">
+      <div class="empty-icon">📱</div>
+      <div style="margin-bottom:8px;font-size:16px;"><b>ย้ายไปดูใน Extension แล้ว</b></div>
+      <div style="color:#666;font-size:14px;">รายการตั้งเวลา/ประวัติทั้งหมดดูได้จากหน้า Bulk Poster หลัก<br>ไม่ใช้ Redis อีกต่อไป</div>
+    </div>`;
+  document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString('th-TH');
 }
 
 async function cancelJob(jobId, btnEl) {
-  if (!confirm('ยกเลิก Job นี้?')) return;
-  btnEl.disabled = true;
-  btnEl.textContent = 'กำลังยกเลิก...';
-  try {
-    const resp = await fetch('/api/cancel', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-bp-secret': 'bp_secret_2024' },
-      body: JSON.stringify({ jobId }),
-    });
-    const data = await resp.json();
-    if (data.success) {
-      loadJobs();
-    } else {
-      alert('ยกเลิกไม่สำเร็จ: ' + (data.error || 'unknown'));
-      btnEl.disabled = false;
-      btnEl.textContent = 'ยกเลิก Job';
-    }
-  } catch (err) {
-    alert('Error: ' + err.message);
-    btnEl.disabled = false;
-    btnEl.textContent = 'ยกเลิก Job';
-  }
+  alert('ยกเลิกผ่าน Extension โดยตรงแทนนะ');
 }
 
 loadJobs();
-setInterval(loadJobs, 60000); // ลดจาก 30s → 60s เพื่อประหยัด Redis requests
 </script>
 
 </body>

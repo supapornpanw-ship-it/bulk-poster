@@ -1,10 +1,5 @@
 // POST /api/publish — QStash เรียกตรงเวลา → publish โพสเพจเดียว
-import { Redis } from '@upstash/redis';
-
-const redis = new Redis({
-  url: process.env.UPSTASH_REDIS_REST_URL,
-  token: process.env.UPSTASH_REDIS_REST_TOKEN,
-});
+// ข้อมูลทั้งหมดอ่านจาก request body (ไม่ใช้ Redis)
 
 async function getFreshPageToken(userToken, pageId) {
   if (!userToken) return null;
@@ -49,66 +44,50 @@ export default async function handler(req, res) {
   if (!signature) return res.status(401).json({ error: 'No QStash signature' });
 
   try {
-    const { jobId, pageIndex } = req.body || {};
-    if (!jobId || pageIndex === undefined) {
-      return res.status(400).json({ error: 'Missing jobId or pageIndex' });
+    // ── อ่านทุกอย่างจาก body (ไม่มี Redis) ──
+    const { jobId, pageIndex, pageId, pageName, pageToken, postId, userToken } = req.body || {};
+
+    if (!postId || !pageToken) {
+      return res.status(400).json({ error: 'Missing postId or pageToken in body' });
     }
-
-    const raw = await redis.get(`job:${jobId}`);
-    if (!raw) return res.status(404).json({ error: 'Job not found' });
-    const job = typeof raw === 'string' ? JSON.parse(raw) : raw;
-
-    if (job.status === 'cancelled') return res.status(200).json({ skipped: true, reason: 'cancelled' });
-
-    const page = job.pages[pageIndex];
-    if (!page || !page.postId) {
-      return res.status(400).json({ error: 'Page not prepared', pageIndex });
-    }
-
-    if (!job.results) job.results = {};
 
     // ── ลอง Publish ด้วย pageToken เดิม ──
-    let token = page.pageToken;
-    let fbData = await tryPublish(page.postId, token);
+    let token = pageToken;
+    let fbData = await tryPublish(postId, token);
 
-    // ── ถ้า error → ลอง refresh page token ด้วย userToken ──
-    if (fbData.error && job.userToken) {
-      console.log(`[PUBLISH] ${page.name} failed with stored token, refreshing...`);
-      const freshToken = await getFreshPageToken(job.userToken, page.id);
+    // ── ถ้า error → refresh page token ด้วย userToken ──
+    if (fbData.error && userToken) {
+      console.log(`[PUBLISH] ${pageName} failed with stored token, refreshing...`);
+      const freshToken = await getFreshPageToken(userToken, pageId);
       if (freshToken) {
         token = freshToken;
-        // อัพเดท token ใน job สำหรับเพจถัดไป
-        job.pages[pageIndex].pageToken = freshToken;
-        fbData = await tryPublish(page.postId, freshToken);
+        fbData = await tryPublish(postId, freshToken);
       }
     }
 
     // ── ถ้ายัง error → เช็คว่าโพสถูก publish ไปแล้วหรือยัง ──
     if (fbData.error) {
-      const alreadyPublished = await checkPublished(page.postId, token);
+      const alreadyPublished = await checkPublished(postId, token);
       if (alreadyPublished) {
-        job.results[page.id] = { success: true, postId: page.postId, pageName: page.name, note: 'already published' };
-      } else {
-        job.results[page.id] = { success: false, error: fbData.error.message, pageName: page.name };
+        return res.status(200).json({
+          success: true,
+          postId,
+          pageName,
+          note: 'already published',
+        });
       }
-    } else {
-      job.results[page.id] = { success: true, postId: page.postId, pageName: page.name };
+      return res.status(200).json({
+        success: false,
+        postId,
+        pageName,
+        error: fbData.error.message,
+      });
     }
-
-    // เช็คครบทุกเพจหรือยัง
-    const doneCount = Object.keys(job.results).length;
-    if (doneCount >= job.pages.length) {
-      job.status = 'done';
-      job.executedAt = Date.now();
-    }
-
-    await redis.set(`job:${jobId}`, JSON.stringify(job), { ex: 604800 });
 
     return res.status(200).json({
-      success: !fbData.error,
-      postId: page.postId,
-      pageName: page.name,
-      error: fbData.error?.message || null,
+      success: true,
+      postId,
+      pageName,
     });
   } catch (err) {
     console.error('Publish error:', err);

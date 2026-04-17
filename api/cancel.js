@@ -1,11 +1,7 @@
-// POST /api/cancel — ยกเลิก scheduled job
-import { Redis } from '@upstash/redis';
-import { Client } from '@upstash/qstash';
+// POST /api/cancel — ยกเลิก QStash messages ตาม IDs ที่ extension ส่งมา
+// ไม่ใช้ Redis แล้ว — extension เก็บ qstashIds ใน chrome.storage.local เอง
 
-const redis = new Redis({
-  url: process.env.UPSTASH_REDIS_REST_URL,
-  token: process.env.UPSTASH_REDIS_REST_TOKEN,
-});
+import { Client } from '@upstash/qstash';
 
 const qstash = new Client({ token: process.env.QSTASH_TOKEN });
 
@@ -16,32 +12,22 @@ export default async function handler(req, res) {
   if (auth !== 'bp_secret_2024') return res.status(401).json({ error: 'Unauthorized' });
 
   try {
-    const { jobId } = req.body;
-    if (!jobId) return res.status(400).json({ error: 'Missing jobId' });
-
-    // อัพเดท status ใน Redis
-    const raw = await redis.get(`job:${jobId}`);
-    if (raw) {
-      const job = typeof raw === 'string' ? JSON.parse(raw) : raw;
-      job.status = 'cancelled';
-      await redis.set(`job:${jobId}`, JSON.stringify(job), { ex: 604800 });
+    const { qstashIds } = req.body;
+    if (!Array.isArray(qstashIds) || !qstashIds.length) {
+      return res.status(400).json({ error: 'Missing qstashIds array' });
     }
 
-    // ลบ QStash scheduled messages
-    const qRaw = await redis.get(`qstash:${jobId}`);
-    if (qRaw) {
-      const ids = typeof qRaw === 'string' ? JSON.parse(qRaw) : qRaw;
-      for (const msgId of ids) {
-        try {
-          await qstash.messages.delete(msgId);
-        } catch (e) {
-          // message อาจถูกส่งไปแล้ว ไม่เป็นไร
-        }
+    let cancelled = 0;
+    for (const msgId of qstashIds) {
+      try {
+        await qstash.messages.delete(msgId);
+        cancelled++;
+      } catch (e) {
+        // message อาจถูกส่งไปแล้ว ไม่เป็นไร
       }
-      await redis.del(`qstash:${jobId}`);
     }
 
-    return res.status(200).json({ success: true });
+    return res.status(200).json({ success: true, cancelled });
   } catch (err) {
     console.error('Cancel error:', err);
     return res.status(500).json({ error: err.message });

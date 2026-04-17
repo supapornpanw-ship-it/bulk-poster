@@ -691,7 +691,13 @@ async function prepareScheduledJob(jobId, pages, postData, delay, scheduledTime,
         }),
       });
       const srvData = await resp.json();
-      if (srvData.success) serverOk = true;
+      if (srvData.success) {
+        serverOk = true;
+        // เก็บ qstashIds ไว้ใน job สำหรับ cancel (Redis ไม่มีแล้ว)
+        if (Array.isArray(srvData.qstashIds)) {
+          job.qstashIds = srvData.qstashIds;
+        }
+      }
     } catch (e) {
       console.warn('Server schedule failed, falling back to alarm:', e.message);
     }
@@ -1145,6 +1151,22 @@ function handleApiRequest(request, sender, sendResponse) {
       if (j) {
         j.status = 'cancelled';
         await saveScheduledJobs(jobs);
+
+        // ส่ง qstashIds ไป server ให้ยกเลิก QStash messages
+        if (Array.isArray(j.qstashIds) && j.qstashIds.length) {
+          try {
+            await fetch('https://bulk-poster.vercel.app/api/cancel', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'x-bp-secret': 'bp_secret_2024',
+              },
+              body: JSON.stringify({ qstashIds: j.qstashIds }),
+            });
+          } catch (e) {
+            console.warn('Cancel QStash failed:', e.message);
+          }
+        }
       }
       return { success: true };
     }
