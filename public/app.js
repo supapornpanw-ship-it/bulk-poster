@@ -855,6 +855,14 @@ function fmtDate(ts) {
   return new Date(ts).toLocaleString('th-TH', { day: '2-digit', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit' });
 }
 function trunc(s, n) { return s && s.length > n ? s.slice(0, n) + '…' : (s || ''); }
+function escHtml(s) {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
 
 // ═══════════════════════════════════════════════════════════════
 // ─── Mode Tab Switching ──────────────────────────────────────
