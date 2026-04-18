@@ -724,20 +724,36 @@ function renderScheduled(jobs) {
     const statuses = job.pageStatuses || {};
     const baseTime = job.scheduledTime || 0;
     const perPageDelay = job.delay || 0;
+    const now = Date.now();
+    const BUFFER_MS = 60000; // เผื่อ 1 นาทีหลังเวลาตั้ง
     let pagesHtml = '';
+    let assumedDoneCount = 0;
     (job.pages || []).forEach((p, i) => {
       const ps = statuses[i] || { status: 'waiting' };
-      let icon;
-      if (ps.status === 'done') icon = '✅';
-      else if (ps.status === 'error') icon = '❌';
-      else if (ps.status === 'posting') icon = '🔄';
-      else icon = '⏳';
       const fireAt = baseTime + i * perPageDelay;
+      const pastFire = now > (fireAt + BUFFER_MS);
+
+      let icon, effStatus = ps.status;
+      // ถ้ายัง waiting แต่เลยเวลามาแล้ว → ถือว่า QStash publish ไปแล้ว
+      if ((ps.status === 'waiting' || !ps.status) && pastFire) {
+        effStatus = 'assumed_done';
+      }
+
+      if (effStatus === 'done' || effStatus === 'assumed_done') { icon = '✅'; assumedDoneCount++; }
+      else if (effStatus === 'error') icon = '❌';
+      else if (effStatus === 'posting') icon = '🔄';
+      else icon = '⏳';
+
       const d = new Date(fireAt);
       const pad = n => String(n).padStart(2, '0');
       const timeTxt = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
       pagesHtml += `<span class="page-status-chip">${icon} ${p.name} <span style="opacity:.7;margin-left:4px">🕐 ${timeTxt}</span></span>`;
     });
+
+    // สถานะรวมของ job: ถ้าทุกเพจเลยเวลาแล้ว → ถือว่า done
+    const totalPages = (job.pages || []).length;
+    const allDone = totalPages > 0 && assumedDoneCount >= totalPages;
+    const displayStatus = allDone ? 'done' : job.status;
 
     const pd = job.postData || {};
     const thumbHtml = pd.imageData ? `<img src="${pd.imageData}" class="job-thumb" />` : '';
@@ -749,9 +765,11 @@ function renderScheduled(jobs) {
     if (pd.cta && pd.cta !== 'NO_BUTTON') detailParts.push(`<b>CTA:</b> ${escHtml(pd.cta)}`);
     const detailHtml = detailParts.length ? `<div class="job-details">${detailParts.join(' · ')}</div>` : '';
 
+    const badgeCls = displayStatus === 'done' ? 'jb-done' : (displayStatus === 'posting' ? 'jb-posting' : 'jb-sched');
+    const badgeTxt = displayStatus === 'done' ? '✅ สำเร็จ' : (displayStatus === 'posting' ? '🔄 กำลังโพส' : '⏰ ตั้งเวลา');
     card.innerHTML = `
       <div class="job-row1">
-        <span class="job-badge ${job.status === 'posting' ? 'jb-posting' : 'jb-sched'}">${job.status === 'posting' ? '🔄 กำลังโพส' : '⏰ ตั้งเวลา'}</span>
+        <span class="job-badge ${badgeCls}">${badgeTxt}</span>
         <a href="${pd.link || job.link || ''}" target="_blank" class="job-link">${trunc(pd.link || job.link || '', 50)}</a>
       </div>
       <div class="job-preview">
@@ -768,14 +786,24 @@ function renderScheduled(jobs) {
       <div class="job-page-statuses">${pagesHtml}</div>
       <div class="job-actions">
         <button class="btn btn-ghost btn-sm" style="color:var(--primary)" data-track="${job.id}">📊 ดูสถานะ</button>
-        <button class="btn btn-ghost btn-sm" style="color:var(--danger)" data-id="${job.id}">ยกเลิก</button>
+        ${displayStatus !== 'done' ? `<button class="btn btn-ghost btn-sm" style="color:var(--danger)" data-id="${job.id}">ยกเลิก</button>` : `<button class="btn btn-ghost btn-sm" style="color:var(--muted)" data-del="${job.id}">ลบออกจาก list</button>`}
       </div>
     `;
-    card.querySelector('[data-id]').addEventListener('click', async (e) => {
-      if (!confirm('ยืนยันยกเลิก?')) return;
-      await sendExt({ type: 'CANCEL_SCHEDULED', id: e.target.dataset.id });
-      loadScheduled();
-    });
+    const cancelBtn = card.querySelector('[data-id]');
+    if (cancelBtn) {
+      cancelBtn.addEventListener('click', async (e) => {
+        if (!confirm('ยืนยันยกเลิก?')) return;
+        await sendExt({ type: 'CANCEL_SCHEDULED', id: e.target.dataset.id });
+        loadScheduled();
+      });
+    }
+    const delBtn = card.querySelector('[data-del]');
+    if (delBtn) {
+      delBtn.addEventListener('click', async (e) => {
+        await sendExt({ type: 'CANCEL_SCHEDULED', id: e.target.dataset.del });
+        loadScheduled();
+      });
+    }
     card.querySelector('[data-track]').addEventListener('click', () => {
       startJobPolling(job.id);
     });
