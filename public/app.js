@@ -125,6 +125,9 @@ async function init() {
 function showApp() {
   document.getElementById('connectScreen').style.display = 'none';
   document.getElementById('mainApp').style.display = '';
+  // โหลดรายการตั้งเวลาทันที (ก่อนหน้านี้รอ setInterval 60 วิ → เห็นว่าง)
+  loadScheduled();
+  updateSchedBadge();
 }
 
 // ─── Connect ─────────────────────────────────────────────────
