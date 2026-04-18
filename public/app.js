@@ -711,10 +711,12 @@ function renderScheduled(jobs) {
   if (activePollingJobId && jobs.some(j => j.id === activePollingJobId)) return;
 
   if (!jobs.length) { el.innerHTML = `<div class="empty-state">📅 ยังไม่มีรายการตั้งเวลา</div>`; return; }
+  // เรียงจากสร้างล่าสุด → เก่าสุด (บนลงล่าง)
+  const sorted = [...jobs].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
   el.innerHTML = '';
   const list = document.createElement('div');
   list.className = 'job-list';
-  jobs.forEach(job => {
+  sorted.forEach(job => {
     const card = document.createElement('div');
     card.className = 'job-card';
 
