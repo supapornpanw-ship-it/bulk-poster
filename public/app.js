@@ -702,8 +702,10 @@ function renderScheduled(jobs) {
     const card = document.createElement('div');
     card.className = 'job-card';
 
-    // สร้าง per-page status HTML
+    // สร้าง per-page status HTML พร้อมเวลาจริงของแต่ละเพจ
     const statuses = job.pageStatuses || {};
+    const baseTime = job.scheduledTime || 0;
+    const perPageDelay = job.delay || 0;
     let pagesHtml = '';
     (job.pages || []).forEach((p, i) => {
       const ps = statuses[i] || { status: 'waiting' };
@@ -712,7 +714,11 @@ function renderScheduled(jobs) {
       else if (ps.status === 'error') icon = '❌';
       else if (ps.status === 'posting') icon = '🔄';
       else icon = '⏳';
-      pagesHtml += `<span class="page-status-chip">${icon} ${p.name}</span>`;
+      const fireAt = baseTime + i * perPageDelay;
+      const d = new Date(fireAt);
+      const pad = n => String(n).padStart(2, '0');
+      const timeTxt = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      pagesHtml += `<span class="page-status-chip">${icon} ${p.name} <span style="opacity:.7;margin-left:4px">🕐 ${timeTxt}</span></span>`;
     });
 
     const pd = job.postData || {};
@@ -738,7 +744,7 @@ function renderScheduled(jobs) {
         </div>
       </div>
       <div class="job-meta">
-        <span>🕐 ${fmtDate(job.scheduledTime)}</span>
+        <span>🕐 ${fmtDate(job.scheduledTime)}${(job.pages?.length > 1 && job.delay) ? ' → ' + (() => { const last = new Date((job.scheduledTime || 0) + (job.pages.length - 1) * (job.delay || 0)); const pad = n => String(n).padStart(2, '0'); return `${pad(last.getHours())}:${pad(last.getMinutes())}`; })() : ''}</span>
         <span>${job.pages?.length || 0} เพจ ${job.delay ? '· ห่าง ' + Math.round(job.delay/60000) + ' นาที' : ''}</span>
       </div>
       <div class="job-page-statuses">${pagesHtml}</div>
