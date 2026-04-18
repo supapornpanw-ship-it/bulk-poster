@@ -566,7 +566,8 @@ async function doSchedule(selPages, postData, delay, scheduledTime, adAccountId)
     confirmEl.style.display = '';
     loadScheduled();
     updateSchedBadge();
-    if (jobId) startJobPolling(jobId);
+    // ไม่ auto-poll job ล่าสุด — ไม่งั้นจะเห็นแค่ job เดียว (renderJobLiveStatus เขียนทับทั้ง list)
+    // ถ้าอยากดูสถานะเจาะจง → กดปุ่ม "📊 ดูสถานะ" ที่ job card เอง
   } catch (e) {
     logRow.className = 'log-row log-err';
     logRow.textContent = `✗ ${e.message}`;
@@ -620,7 +621,8 @@ function renderJobLiveStatus(job) {
   const results = job.results || {};
 
   let html = `<div class="live-status-card">`;
-  html += `<div class="live-status-header">`;
+  html += `<div class="live-status-header" style="display:flex;align-items:center;gap:8px;">`;
+  html += `<button id="btnBackToList" class="btn btn-ghost btn-sm">← กลับไปดูทั้งหมด</button>`;
   html += `<span class="live-pulse ${job.status === 'posting' ? 'active' : ''}"></span>`;
   html += `<strong>${job.status === 'done' ? '✅ โพสต์เสร็จแล้ว' : job.status === 'posting' ? '🔄 กำลังโพสต์...' : '⏰ รอเวลาโพสต์'}</strong>`;
   html += `</div>`;
@@ -668,6 +670,17 @@ function renderJobLiveStatus(job) {
   html += `</div></div>`;
 
   el.innerHTML = html;
+
+  // ปุ่มกลับไปดู list ทั้งหมด
+  const btnBack = document.getElementById('btnBackToList');
+  if (btnBack) {
+    btnBack.addEventListener('click', () => {
+      if (pollingTimer) clearInterval(pollingTimer);
+      pollingTimer = null;
+      activePollingJobId = null;
+      loadScheduled();
+    });
+  }
 }
 
 function fmtTime(ts) {
