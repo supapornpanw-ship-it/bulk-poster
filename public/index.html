@@ -76,6 +76,10 @@
         <span class="nav-icon">🖼️</span>
         <span>โพสรูปภาพ</span>
       </button>
+      <button class="nav-item" data-mode="videos">
+        <span class="nav-icon">📹</span>
+        <span>โพสคลิป</span>
+      </button>
 
       <div class="nav-group-label" style="margin-top:24px">อื่นๆ</div>
       <a class="nav-item" href="/dashboard" target="_blank">
@@ -318,6 +322,74 @@
       </div>
 
     </div><!-- /modePhotos -->
+
+    <!-- ══════ Mode: Videos ══════ -->
+    <div id="modeVideos" class="mode-content">
+
+      <div class="content-header">
+        <h1>โพสคลิป</h1>
+        <p>โพสวิดีโอลงหลายเพจพร้อมกัน ตั้งเวลาได้</p>
+      </div>
+
+      <section class="card">
+        <div class="card-title">เลือกไฟล์วิดีโอ</div>
+        <div class="photo-drop-zone" id="videoDropZone">
+          <div class="drop-icon">📹</div>
+          <div class="drop-title">วางไฟล์วิดีโอ หรือคลิกเพื่อเลือก</div>
+          <div class="drop-sub">รองรับ MP4, MOV (สูงสุด ~100MB)</div>
+          <input type="file" id="videoFile" accept="video/*" style="display:none" />
+        </div>
+        <div id="videoPreviewWrap" style="display:none; margin-top:12px;">
+          <video id="videoPlayer" controls style="max-width:100%; border-radius:8px; background:#000;"></video>
+          <div id="videoInfo" style="margin-top:8px; color:var(--muted); font-size:13px;"></div>
+          <button id="btnRemoveVideo" class="btn btn-ghost btn-sm" style="margin-top:8px; color:var(--danger)">🗑 ลบไฟล์</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-title">แคปชั่น</div>
+        <textarea id="videoCaption" class="inp inp-textarea" rows="4" placeholder="ใส่ข้อความที่จะโพส..."></textarea>
+      </section>
+
+      <section class="card">
+        <div class="card-title">ตั้งค่า</div>
+        <div class="inline-settings">
+          <div class="field">
+            <label class="lbl">ระยะห่างระหว่างเพจ</label>
+            <select id="videoDelaySel" class="inp inp-select">
+              <option value="20000" selected>20 วินาที</option>
+              <option value="30000">30 วินาที</option>
+              <option value="60000">1 นาที</option>
+              <option value="300000">5 นาที</option>
+            </select>
+          </div>
+          <div class="field">
+            <label class="toggle-row">
+              <input type="checkbox" id="videoSchedToggle" />
+              <span class="toggle-sw"></span>
+              <span class="toggle-txt">ตั้งเวลา (FB จัดการให้)</span>
+            </label>
+            <div id="videoSchedBlock" style="display:none; margin-top:8px;">
+              <input id="videoSchedDT" type="datetime-local" class="inp" />
+              <div style="font-size:11px; color:var(--muted); margin-top:4px;">⚠ ต้องห่างจากปัจจุบันอย่างน้อย 10 นาที</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="action-bar">
+        <button id="btnPostVideo" class="btn btn-primary btn-post">
+          <span>🚀</span> <span id="videoPostLabel">โพสคลิป</span>
+        </button>
+      </section>
+
+      <div id="videoProgressWrap" style="display:none" class="card">
+        <div class="progress-track"><div id="videoProgressBar" class="progress-fill"></div></div>
+        <div id="videoProgressLabel" class="progress-label">กำลังอัพโหลด...</div>
+        <div id="videoProgressLog" class="progress-log"></div>
+      </div>
+
+    </div><!-- /modeVideos -->
 
   </main>
 </div>

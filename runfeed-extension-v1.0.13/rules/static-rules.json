@@ -1,0 +1,155 @@
+[
+  {
+    "id": 1,
+    "priority": 1,
+    "action": {
+      "type": "modifyHeaders",
+      "requestHeaders": [
+        { "header": "Origin", "operation": "set", "value": "https://www.facebook.com" },
+        { "header": "Referer", "operation": "set", "value": "https://www.facebook.com/" }
+      ]
+    },
+    "condition": {
+      "urlFilter": "||www.facebook.com",
+      "resourceTypes": ["xmlhttprequest"]
+    }
+  },
+  {
+    "id": 2,
+    "priority": 1,
+    "action": {
+      "type": "modifyHeaders",
+      "requestHeaders": [
+        { "header": "Origin", "operation": "set", "value": "https://m.facebook.com" },
+        { "header": "Referer", "operation": "set", "value": "https://m.facebook.com/" }
+      ]
+    },
+    "condition": {
+      "urlFilter": "||m.facebook.com",
+      "resourceTypes": ["xmlhttprequest"]
+    }
+  },
+  {
+    "id": 3,
+    "priority": 1,
+    "action": {
+      "type": "modifyHeaders",
+      "requestHeaders": [
+        { "header": "Origin", "operation": "set", "value": "https://business.facebook.com" },
+        { "header": "Referer", "operation": "set", "value": "https://business.facebook.com/" }
+      ]
+    },
+    "condition": {
+      "urlFilter": "||business.facebook.com",
+      "resourceTypes": ["xmlhttprequest"]
+    }
+  },
+  {
+    "id": 4,
+    "priority": 1,
+    "action": {
+      "type": "modifyHeaders",
+      "requestHeaders": [
+        { "header": "Origin", "operation": "set", "value": "https://adsmanager.facebook.com" },
+        { "header": "Referer", "operation": "set", "value": "https://adsmanager.facebook.com/" }
+      ]
+    },
+    "condition": {
+      "urlFilter": "||adsmanager.facebook.com",
+      "resourceTypes": ["xmlhttprequest"]
+    }
+  },
+  {
+    "id": 5,
+    "priority": 1,
+    "action": {
+      "type": "modifyHeaders",
+      "requestHeaders": [
+        { "header": "Origin", "operation": "set", "value": "https://upload.facebook.com" },
+        { "header": "Referer", "operation": "set", "value": "https://upload.facebook.com/" }
+      ]
+    },
+    "condition": {
+      "urlFilter": "||upload.facebook.com",
+      "resourceTypes": ["xmlhttprequest"]
+    }
+  },
+  {
+    "id": 6,
+    "priority": 1,
+    "action": {
+      "type": "modifyHeaders",
+      "requestHeaders": [
+        { "header": "Origin", "operation": "set", "value": "https://graph.facebook.com" },
+        { "header": "Referer", "operation": "set", "value": "https://graph.facebook.com/" }
+      ]
+    },
+    "condition": {
+      "urlFilter": "||graph.facebook.com",
+      "resourceTypes": ["xmlhttprequest"]
+    }
+  },
+  {
+    "id": 7,
+    "priority": 1,
+    "action": {
+      "type": "modifyHeaders",
+      "requestHeaders": [
+        { "header": "Origin", "operation": "set", "value": "https://mbasic.facebook.com" },
+        { "header": "Referer", "operation": "set", "value": "https://mbasic.facebook.com/" }
+      ]
+    },
+    "condition": {
+      "urlFilter": "||mbasic.facebook.com",
+      "resourceTypes": ["xmlhttprequest"]
+    }
+  },
+  {
+    "id": 8,
+    "priority": 1,
+    "action": {
+      "type": "modifyHeaders",
+      "requestHeaders": [
+        { "header": "Origin", "operation": "set", "value": "https://upload-business.facebook.com" },
+        { "header": "Referer", "operation": "set", "value": "https://upload-business.facebook.com/" }
+      ]
+    },
+    "condition": {
+      "urlFilter": "||upload-business.facebook.com",
+      "resourceTypes": ["xmlhttprequest"]
+    }
+  },
+  {
+    "id": 50,
+    "priority": 1,
+    "action": {
+      "type": "modifyHeaders",
+      "requestHeaders": [
+        { "header": "Sec-Fetch-Dest", "operation": "set", "value": "empty" },
+        { "header": "Sec-Fetch-Mode", "operation": "set", "value": "cors" },
+        { "header": "Sec-Fetch-Site", "operation": "set", "value": "same-origin" }
+      ]
+    },
+    "condition": {
+      "regexFilter": ".*\\.facebook\\.com/.*",
+      "resourceTypes": ["xmlhttprequest"]
+    }
+  },
+  {
+    "id": 60,
+    "priority": 1,
+    "action": {
+      "type": "modifyHeaders",
+      "responseHeaders": [
+        { "header": "Access-Control-Allow-Origin", "operation": "set", "value": "*" },
+        { "header": "Access-Control-Allow-Methods", "operation": "set", "value": "GET, POST, PUT, DELETE, OPTIONS" },
+        { "header": "Access-Control-Allow-Headers", "operation": "set", "value": "*" },
+        { "header": "X-Frame-Options", "operation": "remove" }
+      ]
+    },
+    "condition": {
+      "regexFilter": ".*\\.facebook\\.com/.*",
+      "resourceTypes": ["xmlhttprequest"]
+    }
+  }
+]

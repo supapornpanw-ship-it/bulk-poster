@@ -955,6 +955,61 @@ function handleApiRequest(request, sender, sendResponse) {
       return { success: true, postId: data.id || data.post_id, scheduled: !!scheduledTime, scheduledAt: scheduledTime };
     }
 
+    // ── Post Video — โพสคลิป 1 คลิป → 1 เพจ (รองรับตั้งเวลา native FB) ──
+    if (request.type === 'POST_VIDEO') {
+      const { page, videoData, fileName, caption, scheduledTime } = request;
+      if (!videoData) throw new Error('ไม่มีไฟล์วิดีโอ');
+
+      async function buildFormData(token) {
+        const [header, base64] = videoData.split(',');
+        const mimeType = (header.match(/:(.+?);/) || [])[1] || 'video/mp4';
+        const binary = atob(base64);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        const blob = new Blob([bytes], { type: mimeType });
+
+        const fd = new FormData();
+        fd.append('access_token', token);
+        fd.append('source', blob, fileName || 'video.mp4');
+        if (caption) fd.append('description', caption);
+
+        if (scheduledTime) {
+          const nowSec = Math.floor(Date.now() / 1000);
+          const schedSec = Math.floor(Number(scheduledTime));
+          if (schedSec > nowSec) {
+            fd.append('published', 'false');
+            fd.append('scheduled_publish_time', String(schedSec));
+          }
+        }
+        return fd;
+      }
+
+      let token = page.access_token;
+      let formData = await buildFormData(token);
+      let resp = await fetch(`https://graph.facebook.com/v20.0/${page.id}/videos`, { method: 'POST', body: formData });
+      let data = await resp.json();
+
+      // ถ้า Permission Denied → refresh token แล้วลอง 1 ครั้ง
+      if (data.error && (data.error.code === 10 || data.error.message?.includes('Permission'))) {
+        console.warn(`[POST_VIDEO] Permission Denied → refreshing token for ${page.name}...`);
+        const freshToken = await extractAndSaveToken();
+        if (freshToken) {
+          await chrome.storage.local.set({ userToken: freshToken, tokenExpiry: Date.now() + 30 * 60 * 1000 });
+          const pagesData = await fbGet('/me/accounts?fields=id,name,access_token&limit=200', freshToken);
+          const freshPage = (pagesData.data || []).find(p => p.id === page.id);
+          if (freshPage && freshPage.access_token) {
+            token = freshPage.access_token;
+            formData = await buildFormData(token);
+            resp = await fetch(`https://graph.facebook.com/v20.0/${page.id}/videos`, { method: 'POST', body: formData });
+            data = await resp.json();
+          }
+        }
+      }
+
+      if (data.error) throw new Error(data.error.message);
+      return { success: true, videoId: data.id, scheduled: !!scheduledTime };
+    }
+
     // ── Bulk Post Now — ทำทั้งหมดใน service worker ปิดแท็บได้ ──
     if (request.type === 'BULK_POST_NOW') {
       const { pages, postData, delay, adAccountId } = request;

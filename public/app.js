@@ -1088,3 +1088,121 @@ document.getElementById('btnPostPhotos').addEventListener('click', async () => {
   btn.disabled = false;
   isPosting = false;
 });
+
+// ═══════════════════════════════════════════════════════════════
+// ─── Video Mode ──────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════
+let videoFile = null;
+
+const videoDropZone = document.getElementById('videoDropZone');
+const videoFileInput = document.getElementById('videoFile');
+const videoPlayer = document.getElementById('videoPlayer');
+const videoPreviewWrap = document.getElementById('videoPreviewWrap');
+const videoInfo = document.getElementById('videoInfo');
+
+videoDropZone.addEventListener('click', () => videoFileInput.click());
+videoFileInput.addEventListener('change', (e) => handleVideoSelect(e.target.files[0]));
+
+videoDropZone.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  videoDropZone.classList.add('dragover');
+});
+videoDropZone.addEventListener('dragleave', () => videoDropZone.classList.remove('dragover'));
+videoDropZone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  videoDropZone.classList.remove('dragover');
+  handleVideoSelect(e.dataTransfer.files[0]);
+});
+
+function handleVideoSelect(file) {
+  if (!file) return;
+  if (!file.type.startsWith('video/')) return alert('กรุณาเลือกไฟล์วิดีโอ');
+  if (file.size > 100 * 1024 * 1024) return alert('ไฟล์ใหญ่เกิน 100MB');
+  videoFile = file;
+  videoPlayer.src = URL.createObjectURL(file);
+  videoInfo.textContent = `📁 ${file.name} · ${(file.size / 1024 / 1024).toFixed(1)}MB`;
+  videoPreviewWrap.style.display = '';
+}
+
+document.getElementById('btnRemoveVideo').addEventListener('click', () => {
+  videoFile = null;
+  videoFileInput.value = '';
+  videoPlayer.src = '';
+  videoPreviewWrap.style.display = 'none';
+});
+
+document.getElementById('videoSchedToggle').addEventListener('change', (e) => {
+  document.getElementById('videoSchedBlock').style.display = e.target.checked ? '' : 'none';
+});
+
+document.getElementById('btnPostVideo').addEventListener('click', async () => {
+  if (!videoFile) return alert('เลือกไฟล์วิดีโอก่อน');
+  if (!selectedIds.size) return alert('กรุณาเลือกเพจอย่างน้อย 1 เพจ');
+
+  const caption = document.getElementById('videoCaption').value.trim();
+  const selPages = pages.filter(p => selectedIds.has(p.id));
+  const delay = parseInt(document.getElementById('videoDelaySel').value) || 20000;
+
+  let scheduledTime = null;
+  if (document.getElementById('videoSchedToggle').checked) {
+    const schedDT = document.getElementById('videoSchedDT').value;
+    if (!schedDT) return alert('กรุณาระบุเวลา');
+    scheduledTime = Math.floor(new Date(schedDT).getTime() / 1000);
+    const nowSec = Math.floor(Date.now() / 1000);
+    if (scheduledTime - nowSec < 600) return alert('ตั้งเวลาต้องห่างจากปัจจุบันอย่างน้อย 10 นาที (FB requirement)');
+  }
+
+  // อ่านไฟล์เป็น dataURL ส่งให้ extension
+  const dataUrl = await new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result);
+    r.onerror = reject;
+    r.readAsDataURL(videoFile);
+  });
+
+  const wrap = document.getElementById('videoProgressWrap');
+  const bar = document.getElementById('videoProgressBar');
+  const label = document.getElementById('videoProgressLabel');
+  const log = document.getElementById('videoProgressLog');
+  const btn = document.getElementById('btnPostVideo');
+
+  wrap.style.display = '';
+  log.innerHTML = '';
+  btn.disabled = true;
+  bar.style.width = '0%';
+
+  for (let i = 0; i < selPages.length; i++) {
+    const page = selPages[i];
+    label.textContent = `${i + 1}/${selPages.length} — ${page.name}`;
+
+    const row = document.createElement('div');
+    row.className = 'log-row log-pending';
+    row.textContent = `⏳ กำลังอัพโหลดให้ ${page.name}...`;
+    log.appendChild(row);
+
+    try {
+      const res = await sendExt({
+        type: 'POST_VIDEO',
+        page,
+        videoData: dataUrl,
+        fileName: videoFile.name,
+        caption,
+        scheduledTime,
+      });
+      row.className = 'log-row log-ok';
+      row.textContent = `✓ ${page.name}` + (res.scheduled ? ' (FB ตั้งเวลาแล้ว)' : ' (โพสแล้ว)');
+    } catch (e) {
+      row.className = 'log-row log-err';
+      row.textContent = `✗ ${page.name}: ${e.message}`;
+    }
+
+    bar.style.width = `${((i + 1) / selPages.length) * 100}%`;
+
+    if (i < selPages.length - 1) {
+      await new Promise(r => setTimeout(r, delay));
+    }
+  }
+
+  label.textContent = `เสร็จ! ${selPages.length}/${selPages.length}`;
+  btn.disabled = false;
+});
