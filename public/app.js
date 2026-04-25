@@ -1218,6 +1218,25 @@ document.getElementById('btnPostVideo').addEventListener('click', async () => {
     }
   }
 
-  label.textContent = `เสร็จ! ${selPages.length}/${selPages.length}`;
+  // นับจำนวนสำเร็จ
+  const okCount = log.querySelectorAll('.log-ok').length;
+  label.innerHTML = `เสร็จ! ${okCount}/${selPages.length} เพจ &nbsp; <button id="btnNextVideo" class="btn btn-primary btn-sm" style="margin-left:8px">📹 โพสคลิปถัดไป</button>`;
   btn.disabled = false;
+
+  // ปุ่ม "โพสคลิปถัดไป" — clear ไฟล์ + caption + progress
+  document.getElementById('btnNextVideo')?.addEventListener('click', () => {
+    videoFile = null;
+    videoFileInput.value = '';
+    videoPlayer.src = '';
+    videoPreviewWrap.style.display = 'none';
+    document.getElementById('videoCaption').value = '';
+    document.getElementById('videoSchedToggle').checked = false;
+    document.getElementById('videoSchedBlock').style.display = 'none';
+    document.getElementById('videoSchedDT').value = '';
+    wrap.style.display = 'none';
+    log.innerHTML = '';
+    bar.style.width = '0%';
+    // เลื่อนขึ้นไปที่ drop zone
+    videoDropZone.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  });
 });
