@@ -11,14 +11,14 @@ window.addEventListener('message', (e) => {
   if (cb) { delete pending[e.data.messageId]; cb(e.data.response); }
 });
 
-function sendExt(message) {
+function sendExt(message, timeoutMs = 45000) {
   return new Promise((resolve, reject) => {
     if (!extReady) return reject(new Error('Extension ไม่ได้เชื่อมต่อ'));
     const id = Math.random().toString(36).slice(2);
     const timer = setTimeout(() => {
       delete pending[id];
       reject(new Error('หมดเวลารอ Extension'));
-    }, 45000);
+    }, timeoutMs);
     pending[id] = (res) => {
       clearTimeout(timer);
       if (!res) return reject(new Error('ไม่ได้รับการตอบกลับ'));
@@ -1117,11 +1117,26 @@ videoDropZone.addEventListener('drop', (e) => {
 function handleVideoSelect(file) {
   if (!file) return;
   if (!file.type.startsWith('video/')) return alert('กรุณาเลือกไฟล์วิดีโอ');
-  if (file.size > 100 * 1024 * 1024) return alert('ไฟล์ใหญ่เกิน 100MB');
+  if (file.size > 1024 * 1024 * 1024) return alert('ไฟล์ใหญ่เกิน 1GB');
   videoFile = file;
   videoPlayer.src = URL.createObjectURL(file);
   videoInfo.textContent = `📁 ${file.name} · ${(file.size / 1024 / 1024).toFixed(1)}MB`;
   videoPreviewWrap.style.display = '';
+}
+
+// อ่าน file slice เป็น base64 สำหรับส่งให้ extension
+async function fileSliceToBase64(file, start, end) {
+  const slice = file.slice(start, end);
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => {
+      const dataUrl = r.result;
+      const base64 = dataUrl.split(',')[1];
+      resolve(base64);
+    };
+    r.onerror = reject;
+    r.readAsDataURL(slice);
+  });
 }
 
 document.getElementById('btnRemoveVideo').addEventListener('click', () => {
@@ -1152,14 +1167,6 @@ document.getElementById('btnPostVideo').addEventListener('click', async () => {
     if (scheduledTime - nowSec < 600) return alert('ตั้งเวลาต้องห่างจากปัจจุบันอย่างน้อย 10 นาที (FB requirement)');
   }
 
-  // อ่านไฟล์เป็น dataURL ส่งให้ extension
-  const dataUrl = await new Promise((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => resolve(r.result);
-    r.onerror = reject;
-    r.readAsDataURL(videoFile);
-  });
-
   const wrap = document.getElementById('videoProgressWrap');
   const bar = document.getElementById('videoProgressBar');
   const label = document.getElementById('videoProgressLabel');
@@ -1171,26 +1178,62 @@ document.getElementById('btnPostVideo').addEventListener('click', async () => {
   btn.disabled = true;
   bar.style.width = '0%';
 
+  const fileSize = videoFile.size;
+  const CHUNK_SIZE = 4 * 1024 * 1024; // 4MB ต่อ chunk
+
   for (let i = 0; i < selPages.length; i++) {
     const page = selPages[i];
-    label.textContent = `${i + 1}/${selPages.length} — ${page.name}`;
+    label.textContent = `${i + 1}/${selPages.length} — ${page.name} (เริ่ม...)`;
 
     const row = document.createElement('div');
     row.className = 'log-row log-pending';
-    row.textContent = `⏳ กำลังอัพโหลดให้ ${page.name}...`;
+    row.textContent = `⏳ ${page.name}...`;
     log.appendChild(row);
 
     try {
-      const res = await sendExt({
-        type: 'POST_VIDEO',
+      // ── Phase 1: Start session ──
+      const start = await sendExt({
+        type: 'VIDEO_START',
         page,
-        videoData: dataUrl,
-        fileName: videoFile.name,
+        fileSize,
+      }, 60000);
+      const sessionId = start.upload_session_id;
+
+      // ── Phase 2: Transfer chunks ──
+      let offset = 0;
+      while (offset < fileSize) {
+        const end = Math.min(offset + CHUNK_SIZE, fileSize);
+        const chunkB64 = await fileSliceToBase64(videoFile, offset, end);
+        const pct = Math.round((offset / fileSize) * 100);
+        label.textContent = `${i + 1}/${selPages.length} — ${page.name} (${pct}%)`;
+        row.textContent = `⏳ ${page.name} — ${(offset/1024/1024).toFixed(1)}/${(fileSize/1024/1024).toFixed(1)}MB`;
+
+        const transfer = await sendExt({
+          type: 'VIDEO_TRANSFER',
+          page,
+          sessionId,
+          startOffset: offset,
+          chunkB64,
+          chunkMime: videoFile.type || 'video/mp4',
+        }, 120000); // 2 นาที ต่อ chunk
+
+        // FB ตอบ end_offset (= start_offset ของ chunk ถัดไป)
+        offset = parseInt(transfer.end_offset || end);
+        if (offset >= fileSize) break;
+      }
+
+      // ── Phase 3: Finish ──
+      label.textContent = `${i + 1}/${selPages.length} — ${page.name} (finalize...)`;
+      const finish = await sendExt({
+        type: 'VIDEO_FINISH',
+        page,
+        sessionId,
         caption,
         scheduledTime,
-      });
+      }, 60000);
+
       row.className = 'log-row log-ok';
-      row.textContent = `✓ ${page.name}` + (res.scheduled ? ' (FB ตั้งเวลาแล้ว)' : ' (โพสแล้ว)');
+      row.textContent = `✓ ${page.name}` + (scheduledTime ? ' (FB ตั้งเวลาแล้ว)' : ' (โพสแล้ว)');
     } catch (e) {
       row.className = 'log-row log-err';
       row.textContent = `✗ ${page.name}: ${e.message}`;
