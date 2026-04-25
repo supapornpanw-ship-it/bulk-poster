@@ -128,6 +128,7 @@ function showApp() {
   // โหลดรายการตั้งเวลาทันที (ก่อนหน้านี้รอ setInterval 60 วิ → เห็นว่าง)
   loadScheduled();
   updateSchedBadge();
+  loadScheduledVideos();
 }
 
 // ─── Connect ─────────────────────────────────────────────────
@@ -1186,6 +1187,8 @@ document.getElementById('btnPostVideo').addEventListener('click', async () => {
   btn.disabled = true;
   bar.style.width = '0%';
 
+  const okPages = []; // เก็บ pages ที่สำเร็จ (สำหรับบันทึก list)
+
   for (let i = 0; i < selPages.length; i++) {
     const page = selPages[i];
     label.textContent = `${i + 1}/${selPages.length} — ${page.name}`;
@@ -1206,6 +1209,7 @@ document.getElementById('btnPostVideo').addEventListener('click', async () => {
       }, 600000); // timeout 10 นาที ต่อเพจ
       row.className = 'log-row log-ok';
       row.textContent = `✓ ${page.name}` + (res.scheduled ? ' (FB ตั้งเวลาแล้ว)' : ' (โพสแล้ว)');
+      okPages.push({ id: page.id, name: page.name, videoId: res.videoId });
     } catch (e) {
       row.className = 'log-row log-err';
       row.textContent = `✗ ${page.name}: ${e.message}`;
@@ -1216,6 +1220,23 @@ document.getElementById('btnPostVideo').addEventListener('click', async () => {
     if (i < selPages.length - 1) {
       await new Promise(r => setTimeout(r, delay));
     }
+  }
+
+  // บันทึกเข้า list คลิปตั้งเวลา (เฉพาะถ้ามีตั้งเวลา + มีเพจที่สำเร็จ)
+  if (scheduledTime && okPages.length) {
+    await sendExt({
+      type: 'ADD_SCHEDULED_VIDEO',
+      entry: {
+        id: `vid_${Date.now()}`,
+        fileName: videoFile.name,
+        fileSize: videoFile.size,
+        caption,
+        scheduledTime,
+        pages: okPages,
+        createdAt: Date.now(),
+      },
+    }).catch(() => {});
+    loadScheduledVideos();
   }
 
   // นับจำนวนสำเร็จ
@@ -1240,3 +1261,74 @@ document.getElementById('btnPostVideo').addEventListener('click', async () => {
     videoDropZone.scrollIntoView({ behavior: 'smooth', block: 'center' });
   });
 });
+
+// ─── Scheduled Videos List ──────────────────────────────────
+async function loadScheduledVideos() {
+  const el = document.getElementById('videoSchedList');
+  if (!el) return;
+  try {
+    const res = await sendExt({ type: 'GET_SCHEDULED_VIDEOS' });
+    let videos = Array.isArray(res) ? res : [];
+
+    // ล้างคลิปที่ scheduledTime เลยมา 24 ชม. (FB น่าจะโพสไปแล้ว)
+    const now = Math.floor(Date.now() / 1000);
+    videos = videos.filter(v => (v.scheduledTime || 0) + 86400 > now);
+
+    const badge = document.getElementById('videoSchedBadge');
+    if (videos.length) {
+      badge.style.display = '';
+      badge.textContent = videos.length;
+    } else {
+      badge.style.display = 'none';
+    }
+
+    if (!videos.length) {
+      el.innerHTML = `<div class="empty-state">ยังไม่มีคลิปตั้งเวลา</div>`;
+      return;
+    }
+
+    el.innerHTML = '';
+    const list = document.createElement('div');
+    list.className = 'job-list';
+
+    videos.forEach(v => {
+      const card = document.createElement('div');
+      card.className = 'job-card';
+      const fireTime = v.scheduledTime * 1000;
+      const isPast = fireTime < Date.now();
+      const sizeText = v.fileSize ? `${(v.fileSize/1024/1024).toFixed(1)}MB` : '';
+      const pagesHtml = (v.pages || []).map(p => `<span class="page-status-chip">${isPast ? '✅' : '⏰'} ${escHtml(p.name)}</span>`).join('');
+
+      card.innerHTML = `
+        <div class="job-row1">
+          <span class="job-badge ${isPast ? 'jb-done' : 'jb-sched'}">${isPast ? '✅ น่าจะโพสแล้ว' : '⏰ ตั้งเวลา'}</span>
+          <span class="job-link">📹 ${escHtml(v.fileName || 'คลิป')} ${sizeText ? `· ${sizeText}` : ''}</span>
+        </div>
+        ${v.caption ? `<div class="job-msg">"${escHtml(trunc(v.caption, 120))}"</div>` : ''}
+        <div class="job-meta">
+          <span>🕐 ${fmtDate(fireTime)}</span>
+          <span>${(v.pages || []).length} เพจ</span>
+        </div>
+        <div class="job-page-statuses">${pagesHtml}</div>
+        <div class="job-actions">
+          <button class="btn btn-ghost btn-sm" style="color:var(--muted)" data-del-vid="${v.id}">ลบออกจาก list</button>
+        </div>
+      `;
+      card.querySelector('[data-del-vid]').addEventListener('click', async (e) => {
+        await sendExt({ type: 'DEL_SCHEDULED_VIDEO', id: e.target.dataset.delVid });
+        loadScheduledVideos();
+      });
+      list.appendChild(card);
+    });
+    el.appendChild(list);
+  } catch (e) {
+    el.innerHTML = `<div class="empty-state" style="color:var(--danger)">⚠ ${e.message}</div>`;
+  }
+}
+
+// โหลดเมื่อกดเข้าโหมด videos + ตอน showApp + auto-refresh
+document.querySelector('.nav-item[data-mode="videos"]')?.addEventListener('click', loadScheduledVideos);
+setInterval(() => {
+  const tab = document.querySelector('.nav-item[data-mode="videos"]');
+  if (tab && tab.classList.contains('active')) loadScheduledVideos();
+}, 60000);

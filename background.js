@@ -1229,6 +1229,30 @@ function handleApiRequest(request, sender, sendResponse) {
       return getPostHistory();
     }
 
+    // ── Scheduled Videos List ──
+    if (request.type === 'ADD_SCHEDULED_VIDEO') {
+      const { entry } = request;
+      const { scheduledVideos = [] } = await chrome.storage.local.get('scheduledVideos');
+      scheduledVideos.unshift(entry);
+      // เก็บไม่เกิน 100 รายการ
+      if (scheduledVideos.length > 100) scheduledVideos.length = 100;
+      await chrome.storage.local.set({ scheduledVideos });
+      return { success: true };
+    }
+
+    if (request.type === 'GET_SCHEDULED_VIDEOS') {
+      const { scheduledVideos = [] } = await chrome.storage.local.get('scheduledVideos');
+      return scheduledVideos;
+    }
+
+    if (request.type === 'DEL_SCHEDULED_VIDEO') {
+      const { id } = request;
+      const { scheduledVideos = [] } = await chrome.storage.local.get('scheduledVideos');
+      const filtered = scheduledVideos.filter(v => v.id !== id);
+      await chrome.storage.local.set({ scheduledVideos: filtered });
+      return { success: true };
+    }
+
     if (request.type === 'CLEAR_HISTORY') {
       await chrome.storage.local.set({ postHistory: [] });
       return { success: true };
