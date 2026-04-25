@@ -955,62 +955,58 @@ function handleApiRequest(request, sender, sendResponse) {
       return { success: true, postId: data.id || data.post_id, scheduled: !!scheduledTime, scheduledAt: scheduledTime };
     }
 
-    // ── Resumable Video Upload — Phase 1: Start ──
-    if (request.type === 'VIDEO_START') {
-      const { page, fileSize } = request;
-      const fd = new FormData();
-      fd.append('access_token', page.access_token);
-      fd.append('upload_phase', 'start');
-      fd.append('file_size', String(fileSize));
-      const resp = await fetch(`https://graph.facebook.com/v20.0/${page.id}/videos`, { method: 'POST', body: fd });
-      const data = await resp.json();
-      if (data.error) throw new Error(data.error.message);
-      return data; // { upload_session_id, video_id, start_offset, end_offset }
-    }
+    // ── Post Video — โพสคลิป 1 คลิป → 1 เพจ (ตั้งเวลา native FB เหมือน POST_PHOTO) ──
+    if (request.type === 'POST_VIDEO') {
+      const { page, videoData, fileName, caption, scheduledTime } = request;
+      if (!videoData) throw new Error('ไม่มีไฟล์วิดีโอ');
 
-    // ── Resumable Video Upload — Phase 2: Transfer chunk ──
-    if (request.type === 'VIDEO_TRANSFER') {
-      const { page, sessionId, startOffset, chunkB64, chunkMime } = request;
-      const binary = atob(chunkB64);
-      const bytes = new Uint8Array(binary.length);
-      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-      const blob = new Blob([bytes], { type: chunkMime || 'video/mp4' });
+      async function buildFormData(token) {
+        const [header, base64] = videoData.split(',');
+        const mimeType = (header.match(/:(.+?);/) || [])[1] || 'video/mp4';
+        const binary = atob(base64);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        const blob = new Blob([bytes], { type: mimeType });
 
-      const fd = new FormData();
-      fd.append('access_token', page.access_token);
-      fd.append('upload_phase', 'transfer');
-      fd.append('upload_session_id', sessionId);
-      fd.append('start_offset', String(startOffset));
-      fd.append('video_file_chunk', blob, 'chunk.mp4');
+        const fd = new FormData();
+        fd.append('access_token', token);
+        fd.append('source', blob, fileName || 'video.mp4');
+        if (caption) fd.append('description', caption);
 
-      const resp = await fetch(`https://graph.facebook.com/v20.0/${page.id}/videos`, { method: 'POST', body: fd });
-      const data = await resp.json();
-      if (data.error) throw new Error(data.error.message);
-      return data; // { start_offset, end_offset } — end_offset ใช้เป็น next_offset
-    }
+        if (scheduledTime) {
+          const nowSec = Math.floor(Date.now() / 1000);
+          const schedSec = Math.floor(Number(scheduledTime));
+          if (schedSec > nowSec) {
+            fd.append('published', 'false');
+            fd.append('scheduled_publish_time', String(schedSec));
+          }
+        }
+        return fd;
+      }
 
-    // ── Resumable Video Upload — Phase 3: Finish + Publish/Schedule ──
-    if (request.type === 'VIDEO_FINISH') {
-      const { page, sessionId, caption, scheduledTime } = request;
-      const fd = new FormData();
-      fd.append('access_token', page.access_token);
-      fd.append('upload_phase', 'finish');
-      fd.append('upload_session_id', sessionId);
-      if (caption) fd.append('description', caption);
+      let token = page.access_token;
+      let formData = await buildFormData(token);
+      let resp = await fetch(`https://graph.facebook.com/v20.0/${page.id}/videos`, { method: 'POST', body: formData });
+      let data = await resp.json();
 
-      if (scheduledTime) {
-        const nowSec = Math.floor(Date.now() / 1000);
-        const schedSec = Math.floor(Number(scheduledTime));
-        if (schedSec > nowSec) {
-          fd.append('published', 'false');
-          fd.append('scheduled_publish_time', String(schedSec));
+      if (data.error && (data.error.code === 10 || data.error.message?.includes('Permission'))) {
+        console.warn(`[POST_VIDEO] Permission Denied → refreshing token for ${page.name}...`);
+        const freshToken = await extractAndSaveToken();
+        if (freshToken) {
+          await chrome.storage.local.set({ userToken: freshToken, tokenExpiry: Date.now() + 30 * 60 * 1000 });
+          const pagesData = await fbGet('/me/accounts?fields=id,name,access_token&limit=200', freshToken);
+          const freshPage = (pagesData.data || []).find(p => p.id === page.id);
+          if (freshPage && freshPage.access_token) {
+            token = freshPage.access_token;
+            formData = await buildFormData(token);
+            resp = await fetch(`https://graph.facebook.com/v20.0/${page.id}/videos`, { method: 'POST', body: formData });
+            data = await resp.json();
+          }
         }
       }
 
-      const resp = await fetch(`https://graph.facebook.com/v20.0/${page.id}/videos`, { method: 'POST', body: fd });
-      const data = await resp.json();
       if (data.error) throw new Error(data.error.message);
-      return { success: true, scheduled: !!scheduledTime };
+      return { success: true, videoId: data.id, scheduled: !!scheduledTime };
     }
 
     // ── Bulk Post Now — ทำทั้งหมดใน service worker ปิดแท็บได้ ──
